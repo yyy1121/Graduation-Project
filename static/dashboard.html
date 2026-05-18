@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>洞察 — 电商用户画像与购买预测系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   WARM GALLERY — Design System
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg-canvas: #faf8f5;
+  --bg-surface: #ffffff;
+  --bg-card: #f7f4ef;
+  --bg-elevated: #f0ece5;
+  --bg-hover: #ede8df;
+  --border-subtle: #e8e3da;
+  --border-mid: #d9d3c7;
+  --border-active: #c4b99e;
+  --text-primary: #1a1815;
+  --text-secondary: #5c5852;
+  --text-muted: #9a958b;
+  --text-inverse: #faf8f5;
+  --accent-gold: #a8893c;
+  --accent-gold-light: #c9a54e;
+  --accent-gold-bg: rgba(168,137,60,0.08);
+  --accent-gold-border: rgba(168,137,60,0.2);
+  --accent-steel: #5a7a8a;
+  --accent-steel-bg: rgba(90,122,138,0.06);
+  --accent-crimson: #c1665a;
+  --accent-crimson-bg: rgba(193,102,90,0.06);
+  --accent-sage: #6b8a5e;
+  --accent-sage-bg: rgba(107,138,94,0.06);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.05);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.07);
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --font-display: 'Playfair Display', 'Noto Serif SC', 'Georgia', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --font-ui: 'Noto Sans SC', -apple-system, sans-serif;
+  --transition-fast: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-weight: 300;
+  line-height: 1.65;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #fdfcfa 0%, var(--bg-canvas) 15%, var(--bg-canvas) 100%);
+  overflow-x: hidden;
+}
+
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
+
+.display-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  font-weight: 400; line-height: 1.05; letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.display-title em { font-style: italic; color: var(--accent-gold); }
+
+.section-label {
+  font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-muted);
+}
+
+/* ── Layout ───────────────────────────────────────────────────────────── */
+
+.app-container { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 240px; min-width: 240px; background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle); padding: 2rem 1.3rem;
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
+  z-index: 100; box-shadow: var(--shadow-sm);
+}
+
+.sidebar-brand {
+  font-family: var(--font-display); font-size: 1.3rem; font-weight: 600;
+  color: var(--text-primary); letter-spacing: 0.05em; margin-bottom: 2.2rem;
+}
+.sidebar-brand span {
+  color: var(--text-muted); font-size: 0.62rem; display: block;
+  font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.12em; margin-top: 0.15rem;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem;
+  margin-bottom: 0.12rem; border-radius: var(--radius-sm); cursor: pointer;
+  transition: all var(--transition-fast); color: var(--text-secondary);
+  font-size: 0.84rem; font-weight: 400; letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+.nav-item:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.nav-item.active {
+  color: var(--accent-gold); background: var(--accent-gold-bg);
+  border-color: var(--accent-gold-border); font-weight: 500;
+}
+.nav-item .nav-icon { width: 16px; text-align: center; font-size: 0.8rem; opacity: 0.6; }
+.nav-item.active .nav-icon { opacity: 1; }
+
+.search-box { margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-subtle); }
+.search-label {
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em;
+  color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase;
+}
+.search-input {
+  width: 100%; background: var(--bg-canvas); border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm); padding: 0.45rem 0.65rem; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
+}
+.search-input:focus { border-color: var(--accent-gold); box-shadow: 0 0 0 3px var(--accent-gold-bg); }
+.search-input::placeholder { color: var(--text-muted); }
+
+.search-result {
+  margin-top: 0.5rem; padding: 0.6rem 0.75rem; background: var(--bg-card);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  font-size: 0.72rem; display: none;
+}
+.search-result.visible { display: block; animation: fadeUp 0.3s ease; }
+.search-result .sr-name { color: var(--accent-gold); font-weight: 600; }
+.search-result .sr-stat { color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.66rem; margin-top: 0.12rem; }
+
+/* ── Main ─────────────────────────────────────────────────────────────── */
+
+.main-content {
+  flex: 1; padding: 2rem 2.5rem; min-width: 0; max-width: 1360px;
+  opacity: 1; transition: opacity 0.2s ease;
+}
+
+.page-header {
+  margin-bottom: 2rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem;
+}
+.page-header .section-label { margin-bottom: 0.3rem; }
+
+/* ── KPI Cards ────────────────────────────────────────────────────────── */
+
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 1rem 1.2rem;
+  position: relative; overflow: hidden; transition: all var(--transition-smooth);
+  cursor: default; box-shadow: var(--shadow-sm);
+}
+.kpi-card::after {
+  content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px;
+  background: var(--accent-gold); transform: scaleX(0); transform-origin: left;
+  transition: transform var(--transition-smooth);
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kpi-card:hover::after { transform: scaleX(1); }
+
+.kpi-label {
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.13em;
+  color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.2rem;
+}
+.kpi-value {
+  font-family: var(--font-display); font-size: 1.7rem; font-weight: 600;
+  color: var(--text-primary); letter-spacing: -0.01em; line-height: 1;
+}
+.kpi-value.accent { color: var(--accent-gold); }
+.kpi-subtitle {
+  font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.3rem;
+}
+
+/* ── Chart panels ─────────────────────────────────────────────────────── */
+
+.chart-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;
+}
+
+.chart-panel {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 1rem 1.2rem 1.2rem;
+  transition: all var(--transition-fast); box-shadow: var(--shadow-sm);
+  overflow: visible;
+}
+.chart-panel:hover { box-shadow: var(--shadow-md); }
+.chart-panel.full { grid-column: 1 / -1; }
+
+.chart-title {
+  font-family: var(--font-display); font-size: 0.95rem; font-weight: 600;
+  color: var(--text-primary); margin-bottom: 0.15rem; letter-spacing: 0.02em;
+}
+.chart-subtitle {
+  font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted);
+  letter-spacing: 0.06em; margin-bottom: 0.5rem;
+}
+
+.chart-plot { width: 100%; }
+.chart-plot.h300 { min-height: 300px; }
+.chart-plot.h340 { min-height: 340px; }
+.chart-plot.h400 { min-height: 400px; }
+.chart-plot.h460 { min-height: 460px; }
+.chart-plot.h500 { min-height: 500px; }
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+
+.data-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.7rem; }
+.data-table thead { border-bottom: 2px solid var(--border-mid); }
+.data-table th {
+  text-align: left; padding: 0.5rem 0.65rem; color: var(--text-muted);
+  font-weight: 500; letter-spacing: 0.07em; font-size: 0.6rem; text-transform: uppercase;
+}
+.data-table td {
+  padding: 0.4rem 0.65rem; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);
+}
+.data-table tbody tr:hover td { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* ── Tags ─────────────────────────────────────────────────────────────── */
+
+.tag {
+  display: inline-block; padding: 0.1rem 0.5rem; border-radius: 2px;
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.07em; font-weight: 500;
+}
+.tag-gold { background: var(--accent-gold-bg); color: var(--accent-gold); border: 1px solid var(--accent-gold-border); }
+.tag-steel { background: var(--accent-steel-bg); color: var(--accent-steel); border: 1px solid rgba(90,122,138,0.2); }
+.tag-crimson { background: var(--accent-crimson-bg); color: var(--accent-crimson); border: 1px solid rgba(193,102,90,0.2); }
+
+/* ── Expand toggle ────────────────────────────────────────────────────── */
+
+.expand-toggle {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.9rem;
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-mono);
+  font-size: 0.7rem; color: var(--text-secondary); letter-spacing: 0.05em;
+  transition: all var(--transition-fast); margin-top: 0.8rem; box-shadow: var(--shadow-sm);
+}
+.expand-toggle:hover { border-color: var(--accent-gold); color: var(--accent-gold); background: var(--accent-gold-bg); }
+.expand-content { display: none; margin-top: 0.8rem; }
+.expand-content.open { display: block; animation: fadeUp 0.4s ease; }
+
+/* ── Prediction bar ───────────────────────────────────────────────────── */
+
+.prediction-bar { height: 6px; background: var(--border-subtle); border-radius: 3px; overflow: hidden; margin: 0.3rem 0; }
+.prediction-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.prediction-fill.high { background: var(--accent-crimson); }
+.prediction-fill.mid { background: var(--accent-gold); }
+.prediction-fill.low { background: var(--accent-steel); }
+
+/* ── Form ─────────────────────────────────────────────────────────────── */
+
+.btn-primary {
+  background: var(--accent-gold); color: white; border: none; border-radius: var(--radius-sm);
+  padding: 0.45rem 1.2rem; font-family: var(--font-mono); font-size: 0.7rem;
+  letter-spacing: 0.07em; cursor: pointer; font-weight: 500; transition: all var(--transition-fast);
+}
+.btn-primary:hover { background: var(--accent-gold-light); }
+
+.btn-ghost {
+  background: transparent; color: var(--accent-gold); border: 1px solid var(--accent-gold-border);
+  border-radius: var(--radius-sm); padding: 0.45rem 1.1rem; font-family: var(--font-mono);
+  font-size: 0.7rem; letter-spacing: 0.07em; cursor: pointer; transition: all var(--transition-fast);
+}
+.btn-ghost:hover { background: var(--accent-gold-bg); }
+
+.input-field {
+  flex: 1; background: var(--bg-canvas); border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm); padding: 0.45rem 0.65rem; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
+}
+.input-field:focus { border-color: var(--accent-gold); box-shadow: 0 0 0 3px var(--accent-gold-bg); }
+
+/* ── Animations ───────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-in { animation: fadeUp 0.5s ease both; }
+.stagger-1 { animation-delay: 0.03s; }
+.stagger-2 { animation-delay: 0.07s; }
+.stagger-3 { animation-delay: 0.11s; }
+.stagger-4 { animation-delay: 0.15s; }
+.stagger-5 { animation-delay: 0.19s; }
+.stagger-6 { animation-delay: 0.23s; }
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1200px) {
+  .chart-row { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .sidebar { width: 190px; min-width: 190px; }
+  .main-content { padding: 1.5rem; }
+}
+@media (max-width: 768px) {
+  .app-container { flex-direction: column; }
+  .sidebar { width: 100%; min-width: 100%; height: auto; position: relative; padding: 1rem; box-shadow: none; }
+  .main-content { padding: 1rem; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .display-title { font-size: 1.6rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <aside class="sidebar">
+    <div class="sidebar-brand">洞察<span>INSIGHT SYSTEM</span></div>
+    <nav id="nav">
+      <div class="nav-item active" data-page="overview"><span class="nav-icon">◇</span> 用户画像总览</div>
+      <div class="nav-item" data-page="propensity"><span class="nav-icon">◎</span> 购买倾向分析</div>
+      <div class="nav-item" data-page="behavior"><span class="nav-icon">◈</span> 行为路径追踪</div>
+      <div class="nav-item" data-page="segments"><span class="nav-icon">▣</span> 用户分群与标签</div>
+      <div class="nav-item" data-page="products"><span class="nav-icon">◆</span> 热销商品分析</div>
+    </nav>
+    <div class="search-box">
+      <div class="search-label">User Lookup</div>
+      <input type="text" class="search-input" id="userSearch" placeholder="输入 User ID…" autocomplete="off">
+      <div class="search-result" id="searchResult"></div>
+    </div>
+  </aside>
+
+  <main class="main-content" id="mainContent"></main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONFIG & HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const API = 'http://localhost:8000/api';
+const GOLD = '#a8893c', GOLD_LIGHT = '#c9a54e', STEEL = '#5a7a8a';
+const CRIMSON = '#c1665a', SAGE = '#6b8a5e', BRONZE = '#8b7355';
+const CHART_COLORS = [GOLD, STEEL, BRONZE, CRIMSON, SAGE, '#8b7d9e', '#6b95a8', '#c9a54e'];
+const PLOTLY_CONFIG = { displayModeBar: false, responsive: true, displaylogo: false };
+
+// Base layout with generous margins so labels never clip
+function baseLayout(overrides = {}) {
+  // Deep merge so partial margin/xaxis/yaxis overrides don't lose base keys
+  const base = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#5c5852', size: 11, family: 'JetBrains Mono, Noto Sans SC' },
+    margin: { l: 60, r: 30, t: 30, b: 70 },
+    xaxis: { gridcolor: '#e8e3da', zeroline: false, linecolor: '#d9d3c7', automargin: true },
+    yaxis: { gridcolor: '#e8e3da', zeroline: false, linecolor: '#d9d3c7', automargin: true },
+    hovermode: 'x unified',
+    legend: { font: { color: '#5c5852' }, orientation: 'h', yanchor: 'top', y: 1.15, xanchor: 'center', x: 0.5 },
+    colorway: CHART_COLORS,
+  };
+  // Deep-merge overrides into base
+  const merged = { ...base };
+  for (const [key, val] of Object.entries(overrides)) {
+    if (val && typeof val === 'object' && !Array.isArray(val) && base[key] && typeof base[key] === 'object' && !Array.isArray(base[key])) {
+      merged[key] = { ...base[key], ...val };
+    } else {
+      merged[key] = val;
+    }
+  }
+  return merged;
+}
+
+async function fetchAPI(path) {
+  try { const r = await fetch(`${API}${path}`); if (!r.ok) throw new Error(`${r.status}`); return await r.json(); }
+  catch (e) { console.error(`API ${path}:`, e); return null; }
+}
+
+async function fetchPost(path, body) {
+  try { const r = await fetch(`${API}${path}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); if (!r.ok) throw new Error(`${r.status}`); return await r.json(); }
+  catch (e) { console.error(`API ${path}:`, e); return null; }
+}
+
+function draw(id, data, layoutOverrides = {}) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn(`draw: element #${id} not found`); return; }
+  Plotly.newPlot(id, data, baseLayout(layoutOverrides), PLOTLY_CONFIG);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+
+let currentPage = 'overview';
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    currentPage = item.dataset.page;
+    renderPage(currentPage);
+  });
+});
+
+async function renderPage(page) {
+  const main = document.getElementById('mainContent');
+  main.style.opacity = '0';
+  document.getElementById('searchResult').classList.remove('visible');
+  switch (page) {
+    case 'overview': await renderOverview(main); break;
+    case 'propensity': await renderPropensity(main); break;
+    case 'behavior': await renderBehavior(main); break;
+    case 'segments': await renderSegments(main); break;
+    case 'products': await renderProducts(main); break;
+  }
+  requestAnimationFrame(() => { main.style.opacity = '1'; });
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  MODULE 1: 用户画像总览                                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+async function renderOverview(main) {
+  const [kpis, gender, age, recency, frequency, hourly] = await Promise.all([
+    fetchAPI('/overview/kpis'), fetchAPI('/overview/gender'), fetchAPI('/overview/age'),
+    fetchAPI('/overview/rfm/recency'), fetchAPI('/overview/rfm/frequency'), fetchAPI('/overview/hourly'),
+  ]);
+
+  const items = kpis ? [
+    ['总用户数', kpis.total_users.toLocaleString(), ''],
+    ['有订单用户', kpis.has_order_ever.toLocaleString(), 'accent'],
+    ['有浏览用户', kpis.has_click_ever.toLocaleString(), ''],
+    ['下单转化率', kpis.conversion_rate + '%', 'accent'],
+  ] : [];
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div class="section-label">Module 01</div>
+      <h1 class="display-title">用户画像<em>总览</em></h1>
+    </div>
+    <div class="kpi-grid">${items.map(([label, value, cls], i) => `
+      <div class="kpi-card animate-in stagger-${i+1}">
+        <div class="kpi-label">${label}</div>
+        <div class="kpi-value ${cls}">${value}</div>
+      </div>`).join('')}</div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-3"><div class="chart-title">性别分布</div><div class="chart-plot h300" id="chart-gender"></div></div>
+      <div class="chart-panel animate-in stagger-4"><div class="chart-title">年龄分布</div><div class="chart-plot h300" id="chart-age"></div></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-5"><div class="chart-title">最近购买距今天数 (Recency)</div><div class="chart-plot h300" id="chart-r"></div></div>
+      <div class="chart-panel animate-in stagger-6"><div class="chart-title">购买频次分布 (Frequency)</div><div class="chart-plot h300" id="chart-f"></div></div>
+    </div>
+    <div class="chart-panel animate-in" style="margin-bottom:1rem;">
+      <div class="chart-title">时段活跃模式</div>
+      <div class="chart-subtitle">24小时订单与点击活动分布 · 双轴显示（量级差 ≈ 35×）</div>
+      <div class="chart-plot h340" id="chart-hourly"></div>
+    </div>`;
+
+  // Gender — pie chart (no axis label issues)
+  if (gender) draw('chart-gender', [{
+    type: 'pie', hole: 0.55, labels: gender.map(d=>d.gender), values: gender.map(d=>d.count),
+    marker: { colors: [GOLD, STEEL] }, textinfo: 'percent+label', textfont: { color: '#1a1815', size: 12 },
+  }], { margin: { l: 10, r: 10, t: 30, b: 10 },
+      annotations: [{ text: `<b>${gender.reduce((s,d)=>s+d.count,0).toLocaleString()}</b><br>用户`, x:0.5, y:0.5, showarrow:false, font:{size:15,color:GOLD} }] });
+
+  // Age — bar chart
+  if (age) draw('chart-age', [{
+    type: 'bar', x: age.map(d=>d.age_range), y: age.map(d=>d.count),
+    marker: { color: GOLD, line: { width: 0 } },
+    text: age.map(d=>d.count), textposition: 'outside', textfont: { color: '#5c5852', size: 10 },
+  }], { xaxis: { tickangle: -30, automargin: true }, margin: { b: 80 } });
+
+  // Recency
+  if (recency) draw('chart-r', [{
+    type: 'bar', x: recency.map(d=>d.bin), y: recency.map(d=>d.count),
+    marker: { color: GOLD, line: { width: 0 } },
+  }], { margin: { b: 70 } });
+
+  // Frequency
+  if (frequency) draw('chart-f', [{
+    type: 'bar', x: frequency.map(d=>d.bin), y: frequency.map(d=>d.count),
+    marker: { color: STEEL, line: { width: 0 } },
+  }], { margin: { b: 70 } });
+
+  // Hourly — DUAL y-axes (orders and clicks differ by ~35x)
+  if (hourly) {
+    const orderTrace = {
+      type: 'scatter', x: hourly.orders.map(d=>d.hour), y: hourly.orders.map(d=>d.count),
+      mode: 'lines+markers', line: { color: GOLD, width: 2.5, shape: 'spline' },
+      marker: { color: GOLD, size: 5 }, fill: 'tozeroy', fillcolor: 'rgba(168,137,60,0.08)',
+      name: '订单量', yaxis: 'y',
+    };
+    const clickTrace = {
+      type: 'scatter', x: hourly.clicks.map(d=>d.hour), y: hourly.clicks.map(d=>d.count),
+      mode: 'lines+markers', line: { color: STEEL, width: 2.5, shape: 'spline' },
+      marker: { color: STEEL, size: 5 }, fill: 'tozeroy', fillcolor: 'rgba(90,122,138,0.08)',
+      name: '点击量', yaxis: 'y2',
+    };
+    draw('chart-hourly', [orderTrace, clickTrace], {
+      xaxis: { dtick: 2, domain: [0.05, 0.85] },
+      yaxis: { title: { text: '订单量', font: { color: GOLD, size: 10 } }, gridcolor: '#e8e3da', zeroline: false, automargin: true },
+      yaxis2: { title: { text: '点击量', font: { color: STEEL, size: 10 } }, overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)', zeroline: false, automargin: true },
+      legend: { y: 1.25 },
+      margin: { b: 50, r: 70 },
+      showlegend: true,
+    });
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  MODULE 2: 购买倾向分析                                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+async function renderPropensity(main) {
+  const [dist, segs, topFeats] = await Promise.all([
+    fetchAPI('/propensity/distribution'), fetchAPI('/propensity/segments'), fetchAPI('/propensity/top-features'),
+  ]);
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div class="section-label">Module 02</div>
+      <h1 class="display-title">购买倾向<em>分析</em></h1>
+    </div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-1"><div class="chart-title">预测概率分布</div><div class="chart-subtitle">基于 100,000 用户全量预测</div><div class="chart-plot h340" id="chart-dist"></div></div>
+      <div class="chart-panel animate-in stagger-2"><div class="chart-title">购买倾向分层</div><div class="chart-plot h340" id="chart-segs"></div></div>
+    </div>
+    <div class="chart-panel animate-in stagger-3" style="margin-bottom:1rem;">
+      <div class="chart-title">关键特征重要性 (SHAP)</div>
+      <div class="chart-subtitle">Top 15 特征 — 品牌偏好集中度是最强预测信号</div>
+      <div class="chart-plot h500" id="chart-shap"></div>
+    </div>
+    <div class="chart-panel animate-in stagger-4">
+      <div class="chart-title">批量预测查询</div>
+      <div class="chart-subtitle">输入 User ID（逗号分隔），获取实时购买倾向预测 · 阈值 0.625</div>
+      <div style="display:flex;gap:0.6rem;margin-bottom:0.6rem;">
+        <input type="text" id="batchInput" class="input-field" placeholder="e.g. 0, 100, 50000, 99999">
+        <button id="batchBtn" class="btn-primary">执行预测</button>
+      </div>
+      <div id="batchResults"></div>
+    </div>`;
+
+  // Distribution — bar chart
+  if (dist) draw('chart-dist', [{
+    type: 'bar', x: dist.map(d=>d.bin), y: dist.map(d=>d.count),
+    marker: { color: dist.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]), line: { width: 0 } },
+  }], {
+    margin: { b: 80 },
+    shapes: [{ type: 'line', x0: 6.5, x1: 6.5, y0: 0, y1: 1, yref: 'paper', line: { dash: 'dash', color: GOLD, width: 1.5 } }],
+    annotations: [{ text: '阈值 0.625', x: 6.5, y: 1, yref: 'paper', showarrow: false, font: { color: GOLD, size: 10 }, xanchor: 'right' }],
+  });
+
+  // Segments — donut
+  if (segs) draw('chart-segs', [{
+    type: 'pie', hole: 0.6, labels: segs.map(s=>s.segment), values: segs.map(s=>s.count),
+    marker: { colors: [GOLD, STEEL, CRIMSON] }, textinfo: 'label+percent',
+    textfont: { color: '#1a1815', size: 11 }, sort: false,
+  }], { margin: { l: 10, r: 10, t: 30, b: 10 } });
+
+  // SHAP — horizontal bar chart with extra left margin for feature names
+  if (topFeats) {
+    const sorted = [...topFeats].reverse();
+    draw('chart-shap', [{
+      type: 'bar', orientation: 'h',
+      y: sorted.map(d=>d.feature),
+      x: sorted.map(d=>d.importance),
+      marker: { color: sorted.map(d=>d.direction==='促进购买'?GOLD:CRIMSON), line: { width: 0 } },
+      text: sorted.map(d=>`${d.importance.toFixed(3)}  ${d.direction}`),
+      textposition: 'outside', textfont: { color: '#5c5852', size: 10 },
+    }], {
+      height: 480,
+      margin: { l: 200, r: 140, t: 20, b: 30 },
+      xaxis: { title: { text: 'SHAP Importance', font: { size: 11 } }, gridcolor: '#e8e3da', zeroline: true, linecolor: '#d9d3c7' },
+      yaxis: { automargin: true },
+    });
+  }
+
+  // Batch predict
+  document.getElementById('batchBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('batchInput').value.trim();
+    if (!input) return;
+    const ids = input.split(/[,，\s]+/).filter(Boolean);
+    const results = await fetchPost('/propensity/predict', { user_ids: ids });
+    const container = document.getElementById('batchResults');
+    if (!results || !results.length) {
+      container.innerHTML = '<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">未找到匹配用户</div>';
+      return;
+    }
+    container.innerHTML = `<table class="data-table"><thead><tr><th>User ID</th><th>购买概率</th><th>倾向</th><th>预测</th><th>概率条</th></tr></thead>
+      <tbody>${results.map(r => `<tr>
+        <td style="color:var(--text-primary)">${r.user_id}</td>
+        <td style="color:var(--accent-gold);font-weight:500;">${(r.probability*100).toFixed(1)}%</td>
+        <td><span class="tag ${r.probability>=0.7?'tag-crimson':r.probability>=0.3?'tag-gold':'tag-steel'}">${r.segment}</span></td>
+        <td>${r.prediction?'✓ 会购买':'— 未购买'}</td>
+        <td><div class="prediction-bar"><div class="prediction-fill ${r.probability>=0.7?'high':r.probability>=0.3?'mid':'low'}" style="width:${Math.max(1, (r.probability*100).toFixed(0))}%"></div></div></td>
+      </tr>`).join('')}</tbody></table>`;
+  });
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  MODULE 3: 行为路径追踪                                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+async function renderBehavior(main) {
+  const [timeDist, funnel] = await Promise.all([
+    fetchAPI('/path/click-to-order-time'), fetchAPI('/path/category-funnel'),
+  ]);
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div class="section-label">Module 03</div>
+      <h1 class="display-title">行为路径<em>追踪</em></h1>
+    </div>
+    <div class="chart-panel animate-in stagger-1" style="margin-bottom:1rem;">
+      <div class="chart-title">点击到购买转化时间分布</div>
+      <div class="chart-subtitle">从首次浏览到最终下单的时间跨度统计</div>
+      <div class="chart-plot h340" id="chart-time"></div>
+    </div>
+    <div class="chart-panel animate-in stagger-2" style="margin-bottom:1rem;">
+      <div class="chart-title">品类点击–购买漏斗</div>
+      <div class="chart-subtitle">各一级品类的浏览量 vs 成交量 · 双轴显示（点击与订单量级差 ≈ 70×）</div>
+      <div class="chart-plot h460" id="chart-funnel"></div>
+    </div>
+    <div class="chart-panel animate-in stagger-3">
+      <div class="chart-title">单用户行为路径查询</div>
+      <div class="chart-subtitle">查看指定用户的浏览/购买活动统计</div>
+      <div style="display:flex;gap:0.6rem;margin-bottom:0.6rem;">
+        <input type="text" id="journeyInput" class="input-field" placeholder="输入 User ID">
+        <button id="journeyBtn" class="btn-ghost">追踪</button>
+      </div>
+      <div id="journeyResult"></div>
+    </div>`;
+
+  // Time distribution
+  if (timeDist) draw('chart-time', [
+    { type: 'bar', x: timeDist.map(d=>d.bin), y: timeDist.map(d=>d.count),
+      marker: { color: GOLD, line: { width: 0 } }, name: '转化量' },
+    { type: 'scatter', x: timeDist.map(d=>d.bin), y: timeDist.map(d=>d.count),
+      mode: 'lines+markers', line: { color: CRIMSON, width: 2 },
+      marker: { color: CRIMSON, size: 7, symbol: 'diamond' }, name: '趋势', showlegend: false },
+  ], { margin: { b: 70 }, showlegend: false });
+
+  // Category funnel — DUAL x-axes because clicks ≈ 70× orders
+  if (funnel) {
+    const sorted = [...funnel].sort((a,b) => a.click_count - b.click_count);
+    const labels = sorted.map(d => d.cid1_name);
+    draw('chart-funnel', [
+      { type: 'bar', orientation: 'h', y: labels, x: sorted.map(d=>d.click_count),
+        name: '点击量', marker: { color: STEEL, line: { width: 0 } },
+        xaxis: 'x', hoverinfo: 'name+x+y' },
+      { type: 'bar', orientation: 'h', y: labels, x: sorted.map(d=>d.order_count),
+        name: '订单量', marker: { color: GOLD, line: { width: 0 } },
+        xaxis: 'x2', hoverinfo: 'name+x+y' },
+    ], {
+      height: 460,
+      margin: { l: 120, r: 100, t: 30, b: 30 },
+      xaxis: { title: { text: '点击量', font: { color: STEEL, size: 10 } }, gridcolor: '#e8e3da', zeroline: true, domain: [0, 0.47] },
+      xaxis2: { title: { text: '订单量', font: { color: GOLD, size: 10 } }, gridcolor: 'rgba(0,0,0,0)', zeroline: true, domain: [0.53, 1], anchor: 'y' },
+      yaxis: { automargin: true },
+      legend: { y: 1.2 },
+    });
+  }
+
+  // Journey search
+  document.getElementById('journeyBtn')?.addEventListener('click', async () => {
+    const uid = document.getElementById('journeyInput').value.trim();
+    if (!uid) return;
+    const data = await fetchAPI(`/path/user-journey/${uid}`);
+    const container = document.getElementById('journeyResult');
+    if (!data) { container.innerHTML = '<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">用户不存在或数据不可用</div>'; return; }
+    const convRate = data.total_clicks > 0 ? (data.total_orders / data.total_clicks * 100).toFixed(1) : '0.0';
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:0.6rem;">
+        <div class="kpi-card"><div class="kpi-label">总浏览</div><div class="kpi-value" style="font-size:1.3rem;">${data.total_clicks.toLocaleString()}</div></div>
+        <div class="kpi-card"><div class="kpi-label">总购买</div><div class="kpi-value accent" style="font-size:1.3rem;">${data.total_orders.toLocaleString()}</div></div>
+        <div class="kpi-card"><div class="kpi-label">转化率</div><div class="kpi-value" style="font-size:1.3rem;">${convRate}%</div></div>
+        <div class="kpi-card"><div class="kpi-label">最近活跃</div><div class="kpi-value" style="font-size:1.3rem;">${data.R_days}天前</div></div>
+      </div>
+      <div style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.65rem;">${data.message || ''}</div>`;
+  });
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  MODULE 4: 用户分群与标签管理                                                ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+async function renderSegments(main) {
+  const [clusters, clusterCat] = await Promise.all([
+    fetchAPI('/segments/clusters'), fetchAPI('/segments/cluster-category'),
+  ]);
+
+  const names = ['中坚用户', '高价值用户', '流失/沉睡', '极低价值'];
+  const colors = [STEEL, GOLD, CRIMSON, SAGE];
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div class="section-label">Module 04</div>
+      <h1 class="display-title">用户分群<em>与标签</em></h1>
+    </div>
+    <div class="kpi-grid">${(clusters||[]).map((c,i)=>`
+      <div class="kpi-card animate-in stagger-${i+1}" style="border-left:3px solid ${colors[i]};">
+        <div class="kpi-label">Cluster ${c.cluster} · ${names[i]||''}</div>
+        <div class="kpi-value" style="font-size:1.3rem;">${c.user_count.toLocaleString()}</div>
+        <div class="kpi-subtitle">R ${c.avg_R.toFixed(0)}天 · F ${c.avg_F.toFixed(1)} · M ¥${c.avg_M.toFixed(0)} · 订单率 ${(c.order_rate*100).toFixed(0)}%</div>
+      </div>`).join('')}</div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-5"><div class="chart-title">分群画像雷达图</div><div class="chart-subtitle">R/F/M/点击/订单率 · 归一化对比</div><div class="chart-plot h400" id="chart-radar"></div></div>
+      <div class="chart-panel animate-in stagger-6"><div class="chart-title">群组特征对比表</div><div id="chart-cluster-table" style="overflow-x:auto;"></div></div>
+    </div>
+    <div class="chart-panel animate-in" style="margin-bottom:1rem;">
+      <div class="chart-title">各群组 × 品类偏好热力图</div>
+      <div class="chart-subtitle">归一化：数值为该群组内品类订单占比</div>
+      <div class="chart-plot h340" id="chart-heatmap"></div>
+    </div>`;
+
+  // Radar
+  if (clusters) {
+    const radarLabels = ['活跃度(R↓)', '频次(F)', '消费(M)', '点击量', '订单率'];
+    const radarCols = ['avg_R', 'avg_F', 'avg_M', 'avg_clicks', 'order_rate'];
+    const maxVals = radarCols.map(col => Math.max(...clusters.map(c => Math.abs(c[col]||0)), 0.01));
+    draw('chart-radar', clusters.map((c, i) => ({
+      type: 'scatterpolar',
+      r: [...radarCols.map((col, j) => (c[col]||0) / maxVals[j]), (c[radarCols[0]]||0) / maxVals[0]],
+      theta: [...radarLabels, radarLabels[0]],
+      name: `Cluster ${c.cluster} ${names[i]}`,
+      fill: 'toself', line: { color: colors[i], width: 2 },
+      fillcolor: `${colors[i]}18`,
+    })), {
+      polar: {
+        radialaxis: { visible: true, range: [0, 1.05], gridcolor: '#e8e3da', color: '#5c5852' },
+        angularaxis: { gridcolor: '#e8e3da', color: '#5c5852' },
+        bgcolor: 'rgba(0,0,0,0)',
+      },
+      margin: { l: 30, r: 30, t: 30, b: 30 },
+      showlegend: true, legend: { y: -0.05 },
+    });
+
+    // Cluster table
+    document.getElementById('chart-cluster-table').innerHTML = `<table class="data-table"><thead><tr><th>群组</th><th>角色</th><th>用户数</th><th>均R(天)</th><th>均F</th><th>均M(¥)</th><th>均点击</th><th>订单率</th></tr></thead>
+      <tbody>${clusters.map((c,i)=>`<tr><td style="color:${colors[i]};font-weight:500;">Cluster ${c.cluster}</td><td>${names[i]||''}</td><td>${c.user_count.toLocaleString()}</td><td>${c.avg_R.toFixed(0)}</td><td>${c.avg_F.toFixed(1)}</td><td>${c.avg_M.toLocaleString()}</td><td>${c.avg_clicks.toFixed(0)}</td><td>${(c.order_rate*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  // Heatmap — normalize per-cluster category distribution
+  if (clusterCat) {
+    const catCounts = {};
+    clusterCat.forEach(d => { catCounts[d.cid1_name] = (catCounts[d.cid1_name]||0) + d.count; });
+    const topCats = Object.entries(catCounts).sort((a,b) => b[1]-a[1]).slice(0, 12).map(e => e[0]);
+    const filtered = clusterCat.filter(d => topCats.includes(d.cid1_name));
+    const clusterIds = [...new Set(filtered.map(d => d.cluster))].sort((a,b) => a-b);
+    const pivot = {};
+    const totals = {};
+    clusterIds.forEach(c => { pivot[c] = {}; totals[c] = 0; topCats.forEach(cat => { pivot[c][cat] = 0; }); });
+    filtered.forEach(d => { pivot[d.cluster][d.cid1_name] += d.count; totals[d.cluster] += d.count; });
+    const zData = clusterIds.map(c => topCats.map(cat => {
+      return totals[c] > 0 ? pivot[c][cat] / totals[c] : 0;
+    }));
+    draw('chart-heatmap', [{
+      type: 'heatmap',
+      z: zData,
+      x: topCats,
+      y: clusterIds.map(c => `Cluster ${c}`),
+      colorscale: [
+        [0, '#faf8f5'], [0.15, '#f0ece5'], [0.35, GOLD_LIGHT],
+        [0.55, GOLD], [0.75, BRONZE], [1, CRIMSON],
+      ],
+      text: zData.map(row => row.map(v => (v*100).toFixed(1)+'%')),
+      texttemplate: '%{text}',
+      textfont: { color: '#1a1815', size: 10 },
+      hoverongaps: false,
+    }], {
+      margin: { l: 80, r: 30, t: 30, b: 100 },
+      xaxis: { tickangle: -30, automargin: true },
+      yaxis: { automargin: true },
+    });
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  MODULE 5: 热销商品分析                                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+async function renderProducts(main) {
+  let [topItems, topCats, topBrands, priceDist] = await Promise.all([
+    fetchAPI('/products/top?limit=30'), fetchAPI('/products/top-categories'),
+    fetchAPI('/products/top-brands'), fetchAPI('/products/price-distribution'),
+  ]);
+
+  // Filter out items with missing product info (de-listed products)
+  if (topItems) topItems = topItems.filter(d => d.item_name && d.cid1_name);
+
+  // Compute category average price from top items
+  const catPrices = {};
+  const catCounts = {};
+  if (topItems) topItems.forEach(d => {
+    if (!d.cid1_name) return;
+    catPrices[d.cid1_name] = (catPrices[d.cid1_name] || 0) + (d.price || 0);
+    catCounts[d.cid1_name] = (catCounts[d.cid1_name] || 0) + 1;
+  });
+  const catAvgPrice = Object.entries(catPrices)
+    .map(([name, total]) => ({ category: name, avg_price: +(total / catCounts[name]).toFixed(0) }))
+    .sort((a, b) => b.avg_price - a.avg_price);
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div class="section-label">Module 05</div>
+      <h1 class="display-title">热销商品<em>分析</em></h1>
+    </div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-1"><div class="chart-title">品类销售分布</div><div class="chart-subtitle">各一级品类订单量占比</div><div class="chart-plot h400" id="chart-treemap"></div></div>
+      <div class="chart-panel animate-in stagger-2"><div class="chart-title">购买商品价位分布</div><div class="chart-subtitle">订单中商品单价区间统计</div><div class="chart-plot h400" id="chart-price"></div></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-panel animate-in stagger-3"><div class="chart-title">价格×销量关系</div><div class="chart-subtitle">气泡大小 = 销售件数 · 颜色 = 品类 · Top 30 热销商品</div><div class="chart-plot h400" id="chart-bubble"></div></div>
+      <div class="chart-panel animate-in stagger-4"><div class="chart-title">热销品类均价对比</div><div class="chart-subtitle">Top 热销商品在各品类的平均单价</div><div class="chart-plot h400" id="chart-catprice"></div></div>
+    </div>
+    <div class="chart-panel animate-in stagger-5">
+      <div class="chart-title">热销商品明细表</div>
+      <div class="chart-subtitle">Top 30 按订单量降序 · 含商品名称、品类、品牌、价格、销量</div>
+      <div id="productTable" style="max-height:500px;overflow-y:auto;"></div>
+    </div>`;
+
+  // Treemap (keep)
+  if (topCats) draw('chart-treemap', [{
+    type: 'treemap',
+    labels: topCats.map(d => d.cid1_name),
+    values: topCats.map(d => d.count),
+    parents: topCats.map(() => ''),
+    marker: { colors: topCats.map(d => d.count), colorscale: [[0,'#faf8f5'],[0.3,BRONZE],[0.6,GOLD],[1,CRIMSON]] },
+    textfont: { color: '#1a1815', size: 12, family: 'Playfair Display' },
+    textinfo: 'label+value',
+  }], { margin: { l: 10, r: 10, t: 30, b: 10 } });
+
+  // Price distribution (keep)
+  if (priceDist) draw('chart-price', [{
+    type: 'bar', x: priceDist.map(d => d.bin), y: priceDist.map(d => d.count),
+    marker: { color: GOLD, line: { width: 0 } },
+    text: priceDist.map(d => d.count.toLocaleString()), textposition: 'outside',
+    textfont: { color: '#5c5852', size: 10 },
+  }], { margin: { b: 80 } });
+
+  // Price × Orders bubble chart (replaces Top 15)
+  if (topItems) {
+    // Assign colors per category
+    const cats = [...new Set(topItems.map(d => d.cid1_name || '其他'))];
+    const catColorMap = {};
+    cats.forEach((c, i) => { catColorMap[c] = CHART_COLORS[i % CHART_COLORS.length]; });
+
+    draw('chart-bubble', [{
+      type: 'scatter', mode: 'markers',
+      x: topItems.map(d => d.price || 0),
+      y: topItems.map(d => d.order_count),
+      marker: {
+        size: topItems.map(d => Math.max(8, Math.sqrt((d.total_qty || 1)) * 1.8)),
+        color: topItems.map(d => catColorMap[d.cid1_name || '其他']),
+        line: { width: 1, color: 'rgba(0,0,0,0.1)' },
+        sizemode: 'area',
+      },
+      text: topItems.map(d => `${(d.item_name||d.item_id).substring(0,30)}<br>品类: ${d.cid1_name||''}<br>单价: ¥${(d.price||0).toFixed(0)}<br>订单: ${d.order_count}<br>销量: ${d.total_qty}件`),
+      hoverinfo: 'text',
+    }], {
+      xaxis: { title: { text: '单价 (¥)', font: { size: 11 } }, gridcolor: '#e8e3da', zeroline: true },
+      yaxis: { title: { text: '订单数', font: { size: 11 } }, gridcolor: '#e8e3da', zeroline: true },
+      margin: { l: 60, r: 20, t: 20, b: 60 },
+      showlegend: false,
+      hovermode: 'closest',
+    });
+  }
+
+  // Category average price (replaces Top 20 brands)
+  if (catAvgPrice.length) draw('chart-catprice', [{
+    type: 'bar', orientation: 'h',
+    y: catAvgPrice.map(d => d.category),
+    x: catAvgPrice.map(d => d.avg_price),
+    marker: {
+      color: catAvgPrice.map(d => d.avg_price),
+      colorscale: [[0, STEEL], [0.5, GOLD], [1, CRIMSON]],
+      line: { width: 0 },
+    },
+    text: catAvgPrice.map(d => `¥${d.avg_price}`), textposition: 'outside',
+    textfont: { color: '#5c5852', size: 10 },
+  }], {
+    height: 400,
+    margin: { l: 120, r: 60, t: 20, b: 30 },
+    xaxis: { title: { text: '均价 (¥)', font: { size: 10 } }, gridcolor: '#e8e3da' },
+    yaxis: { automargin: true },
+  });
+
+  // Product data table (always visible, no toggle needed)
+  if (topItems) {
+    document.getElementById('productTable').innerHTML = `<table class="data-table"><thead><tr>
+      <th>#</th><th>商品名称</th><th>一级类目</th><th>三级类目</th><th>品牌码</th><th>单价</th><th>订单数</th><th>销售件数</th><th>销售额</th>
+    </tr></thead><tbody>${topItems.map((d, i) => `<tr>
+      <td style="color:var(--text-muted);">${i+1}</td>
+      <td style="color:var(--text-primary);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.item_name||''}">${(d.item_name||d.item_id).substring(0,35)}</td>
+      <td>${d.cid1_name||''}</td>
+      <td>${d.cid3_name||''}</td>
+      <td>${d.brand_code||''}</td>
+      <td style="color:var(--accent-gold);">¥${(d.price||0).toFixed(0)}</td>
+      <td>${d.order_count}</td>
+      <td>${d.total_qty}</td>
+      <td>¥${((d.price||0)*d.total_qty).toLocaleString()}</td>
+    </tr>`).join('')}</tbody></table>`;
+  }
+}
+
+// ── User Search ────────────────────────────────────────────────────────────
+
+let searchTimeout;
+document.getElementById('userSearch').addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  const query = document.getElementById('userSearch').value.trim();
+  if (!query) { document.getElementById('searchResult').classList.remove('visible'); return; }
+  searchTimeout = setTimeout(async () => {
+    const data = await fetchAPI(`/user/${query}`);
+    const result = document.getElementById('searchResult');
+    if (!data) { result.innerHTML = '<div style="color:var(--accent-crimson);">用户不存在</div>'; result.classList.add('visible'); return; }
+    const prob = data.prediction ? (data.prediction.probability*100).toFixed(1)+'%' : 'N/A';
+    result.innerHTML = `
+      <div class="sr-name">用户 ${data.user_id}</div>
+      <div class="sr-stat">${data.gender} · ${data.age_range} · Cluster ${data.cluster}</div>
+      <div class="sr-stat">R: ${data.R_days}天 · F: ${data.F_count}次 · M: ¥${data.total_order_amount.toLocaleString()}</div>
+      <div class="sr-stat" style="color:var(--accent-gold);margin-top:0.15rem;">购买倾向: ${prob} (${data.prediction?.segment||'未知'})</div>`;
+    result.classList.add('visible');
+  }, 300);
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+renderPage('overview');
+</script>
+</body>
+</html>

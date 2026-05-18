@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+电商用户画像与购买预测系统 - FastAPI 后端服务
+==============================================
+轻量版：从 dashboard_cache 加载预计算数据，秒级启动。
+仅加载 user_features + 模型用于实时预测。
+启动: uvicorn backend_api:app --host 0.0.0.0 --port 8000
+"""
+
+import json
+import math
+from pathlib import Path
+from contextlib import asynccontextmanager
+
+import numpy as np
+import pandas as pd
+import joblib
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+# ── Paths ──────────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data" / "parquet"
+MODEL_DIR = BASE_DIR / "data" / "models"
+CACHE_DIR = BASE_DIR / "data" / "dashboard_cache"
+
+# ── Global state ───────────────────────────────────────────────────────────
+model = None
+scaler = None
+feature_names = None
+user_features = None
+predictions_lookup = None  # precomputed predictions for instant lookup
+cache: dict = {}
+
+
+def sanitize(obj):
+    """Recursively replace NaN/Inf with None for safe JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
+
+
+def load_all():
+    """Load model + user features + precomputed JSON cache."""
+    global model, scaler, feature_names, user_features, predictions_lookup, cache
+
+    # Load precomputed cache (instant)
+    for name in ["overview", "clusters", "propensity", "behavior_path", "products"]:
+        path = CACHE_DIR / f"{name}.json"
+        if path.exists():
+            with open(path) as f:
+                cache[name] = sanitize(json.load(f))
+            size_kb = path.stat().st_size / 1024
+            print(f"  [OK] {name}.json ({size_kb:.0f} KB)")
+        else:
+            print(f"  [!] Missing cache: {name}.json — run prepare_dashboard_data.py first")
+
+    # Load precomputed predictions (instant lookup table)
+    pred_path = CACHE_DIR / "user_predictions.parquet"
+    if pred_path.exists():
+        predictions_lookup = pd.read_parquet(pred_path)
+        predictions_lookup["user_id"] = predictions_lookup["user_id"].astype(str)
+        print(f"  [OK] predictions lookup: {predictions_lookup.shape}")
+    else:
+        print(f"  [!] No predictions cache — will use live inference")
+
+    # Load user features (9 MB, needed for user lookup)
+    user_features = pd.read_parquet(DATA_DIR / "user_features_raw_with_cluster.parquet")
+    user_features["user_id"] = user_features["user_id"].astype(str)
+    print(f"  [OK] user_features: {user_features.shape}")
+
+    # Load model artifacts for live inference fallback
+    model = joblib.load(MODEL_DIR / "best_purchase_model.pkl")
+    scaler = joblib.load(MODEL_DIR / "scaler.pkl")
+    feature_names = joblib.load(MODEL_DIR / "feature_names.pkl")
+    print(f"  [OK] model loaded, {len(feature_names)} features")
+
+
+def predict_for_users(user_ids: list[str]) -> dict:
+    """Get predictions — uses precomputed lookup when available, falls back to live inference."""
+    # Use precomputed lookup if available
+    if predictions_lookup is not None:
+        mask = predictions_lookup["user_id"].isin(user_ids)
+        subset = predictions_lookup[mask]
+        return {
+            "user_ids": subset["user_id"].tolist(),
+            "probabilities": subset["purchase_probability"].tolist(),
+            "predictions": subset["prediction_label"].tolist(),
+        }
+
+    # Fall back to live inference
+    mask = user_features["user_id"].isin(user_ids)
+    uf_subset = user_features[mask].copy()
+    if len(uf_subset) == 0:
+        return {"user_ids": [], "probabilities": [], "predictions": []}
+
+    available = [f for f in feature_names if f in uf_subset.columns]
+    missing = [f for f in feature_names if f not in uf_subset.columns]
+    X = uf_subset[available].values.astype(np.float64)
+    if missing:
+        X = np.hstack([X, np.zeros((X.shape[0], len(missing)))])
+    col_order = available + missing
+    idx_map = [col_order.index(f) for f in feature_names]
+    X = X[:, idx_map]
+    X_scaled = scaler.transform(X)
+    X_scaled = np.nan_to_num(X_scaled, 0.0)
+    proba = model.predict_proba(X_scaled)[:, 1]
+    pred = (proba >= 0.625).astype(int)
+
+    return {
+        "user_ids": uf_subset["user_id"].tolist(),
+        "probabilities": proba.tolist(),
+        "predictions": pred.tolist(),
+    }
+
+
+# ── Lifespan ────────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("=" * 60)
+    load_all()
+    print("Backend ready: http://0.0.0.0:8000")
+    print("=" * 60)
+    yield
+
+
+app = FastAPI(title="电商用户画像与购买预测 API", version="2.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve static files & dashboard
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/")
+async def root():
+    """Serve the main dashboard page."""
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
+# ── Models ──────────────────────────────────────────────────────────────────
+
+
+class UserIdsRequest(BaseModel):
+    user_ids: list[str]
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Overview                                                                   ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/overview/kpis")
+async def overview_kpis():
+    return cache.get("overview", {}).get("kpis", {})
+
+@app.get("/api/overview/gender")
+async def overview_gender():
+    return cache.get("overview", {}).get("gender_dist", [])
+
+@app.get("/api/overview/age")
+async def overview_age():
+    return cache.get("overview", {}).get("age_dist", [])
+
+@app.get("/api/overview/rfm/{feature}")
+async def overview_rfm(feature: str):
+    key = f"{feature}_dist"
+    val = cache.get("overview", {}).get(key)
+    if val is None:
+        raise HTTPException(404, f"Unknown RFM feature: {feature}")
+    return val
+
+@app.get("/api/overview/hourly")
+async def overview_hourly():
+    ov = cache.get("overview", {})
+    return {"orders": ov.get("hourly_orders", []), "clicks": ov.get("hourly_clicks", [])}
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Purchase Propensity                                                        ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/propensity/distribution")
+async def propensity_distribution():
+    return cache.get("propensity", {}).get("pred_distribution", [])
+
+@app.get("/api/propensity/segments")
+async def propensity_segments():
+    return cache.get("propensity", {}).get("segments", [])
+
+@app.get("/api/propensity/top-features")
+async def propensity_top_features():
+    return cache.get("propensity", {}).get("top_features", [])
+
+@app.post("/api/propensity/predict")
+async def propensity_predict(req: UserIdsRequest):
+    result = predict_for_users(req.user_ids)
+    out = []
+    for uid, prob, pred in zip(result["user_ids"], result["probabilities"], result["predictions"]):
+        if prob >= 0.7:
+            seg = "高倾向"
+        elif prob >= 0.3:
+            seg = "中倾向"
+        else:
+            seg = "低倾向"
+        out.append({"user_id": uid, "probability": round(prob, 4),
+                     "prediction": pred, "segment": seg})
+    return out
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Behavior Path                                                              ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/path/click-to-order-time")
+async def path_click_to_order():
+    return cache.get("behavior_path", {}).get("click_to_order_dist", [])
+
+@app.get("/api/path/category-funnel")
+async def path_category_funnel():
+    return cache.get("behavior_path", {}).get("category_funnel", [])
+
+@app.get("/api/path/user-journey/{user_id}")
+async def path_user_journey(user_id: str):
+    """User journey: we don't load full click/order parquet in lightweight mode.
+    Return basic stats from user_features instead."""
+    uf_row = user_features[user_features["user_id"] == user_id]
+    if len(uf_row) == 0:
+        raise HTTPException(404, f"User {user_id} not found")
+
+    row = uf_row.iloc[0]
+    return {
+        "user_id": user_id,
+        "total_clicks": int(row["total_clicks"]),
+        "total_orders": int(row["F_count"]),
+        "has_order": int(row["has_order"]),
+        "has_click": int(row["has_click"]),
+        "R_days": int(row["R_days"]),
+        "click_to_buy_ratio": round(float(row["click_to_buy_ratio"]), 4),
+        "message": "轻量模式：显示统计数据。如需详细事件日志，请加载完整数据。",
+        "clicks": [],
+        "orders": [],
+    }
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  User Segments                                                              ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/segments/clusters")
+async def segments_clusters():
+    return cache.get("clusters", {}).get("profile", [])
+
+@app.get("/api/segments/cluster/{cluster_id}")
+async def segments_cluster_detail(cluster_id: int):
+    cluster_users = user_features[user_features["cluster"] == cluster_id]
+    if len(cluster_users) == 0:
+        raise HTTPException(404, f"Cluster {cluster_id} not found")
+
+    stats = {
+        "user_count": len(cluster_users),
+        "avg_R": round(cluster_users["R_days"].mean(), 1),
+        "avg_F": round(cluster_users["F_count"].mean(), 1),
+        "avg_M": round(cluster_users["total_order_amount"].mean(), 1),
+        "avg_clicks": round(cluster_users["total_clicks"].mean(), 1),
+        "has_order_rate": round(cluster_users["has_order"].mean() * 100, 1),
+    }
+    gender = cluster_users["gender"].value_counts().to_dict()
+    age = {str(k): int(v) for k, v in cluster_users["age_range"].value_counts().sort_index().items()}
+
+    sample = cluster_users[["user_id", "gender", "age_range", "F_count",
+                             "total_order_amount", "total_clicks", "R_days"]].head(50)
+    sample["R_days"] = sample["R_days"].round(0).astype(int)
+    sample["F_count"] = sample["F_count"].round(0).astype(int)
+    sample["total_order_amount"] = sample["total_order_amount"].round(1)
+    sample["total_clicks"] = sample["total_clicks"].round(0).astype(int)
+
+    return {
+        "cluster_id": cluster_id,
+        "stats": stats,
+        "gender": {str(k): v for k, v in gender.items()},
+        "age": age,
+        "sample_users": sample.to_dict(orient="records"),
+    }
+
+@app.get("/api/segments/cluster-category")
+async def segments_cluster_category():
+    return cache.get("clusters", {}).get("category", [])
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Hot Products                                                               ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/products/top")
+async def products_top(limit: int = Query(20, le=50)):
+    items = cache.get("products", {}).get("top_items", [])
+    return items[:limit]
+
+@app.get("/api/products/top-categories")
+async def products_top_categories():
+    return cache.get("products", {}).get("top_categories", [])
+
+@app.get("/api/products/top-brands")
+async def products_top_brands():
+    return cache.get("products", {}).get("top_brands", [])
+
+@app.get("/api/products/price-distribution")
+async def products_price_dist():
+    return cache.get("products", {}).get("price_distribution", [])
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  User Detail & Health                                                       ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+@app.get("/api/user/{user_id}")
+async def user_detail(user_id: str):
+    uf_row = user_features[user_features["user_id"] == user_id]
+    if len(uf_row) == 0:
+        raise HTTPException(404, f"User {user_id} not found")
+
+    row = uf_row.iloc[0]
+    user_info = {
+        "user_id": str(row["user_id"]),
+        "gender": str(row["gender"]),
+        "age_range": str(row["age_range"]),
+        "cluster": int(row["cluster"]),
+        "F_count": int(row["F_count"]),
+        "total_order_amount": round(float(row["total_order_amount"]), 1),
+        "total_clicks": int(row["total_clicks"]),
+        "R_days": int(row["R_days"]),
+        "has_order": int(row["has_order"]),
+    }
+
+    pred_result = predict_for_users([user_id])
+    if pred_result["user_ids"]:
+        prob = pred_result["probabilities"][0]
+        pred = pred_result["predictions"][0]
+        if prob >= 0.7:
+            seg = "高倾向"
+        elif prob >= 0.3:
+            seg = "中倾向"
+        else:
+            seg = "低倾向"
+        user_info["prediction"] = {
+            "probability": round(prob, 4),
+            "prediction": pred,
+            "segment": seg,
+        }
+    return user_info
+
+@app.get("/api/health")
+async def health():
+    return {
+        "status": "ok",
+        "model_loaded": model is not None,
+        "users_loaded": user_features is not None,
+        "features": len(feature_names) if feature_names else 0,
+        "cache_keys": list(cache.keys()),
+    }
+
+
+# ── Main ────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
