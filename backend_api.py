@@ -3,7 +3,7 @@
 电商用户画像与购买预测系统 - FastAPI 后端服务
 ==============================================
 轻量版：从 dashboard_cache 加载预计算数据，秒级启动。
-仅加载 user_features + 模型用于实时预测。
+预测结果来自 prepare_dashboard_data.py 生成的离线特征与训练时保存的预处理管线。
 启动: uvicorn backend_api:app --host 0.0.0.0 --port 8000
 """
 
@@ -29,8 +29,10 @@ CACHE_DIR = BASE_DIR / "data" / "dashboard_cache"
 
 # ── Global state ───────────────────────────────────────────────────────────
 model = None
-scaler = None
 feature_names = None
+preprocessor = None
+calibrator = None
+model_metadata = {}
 user_features = None
 predictions_lookup = None  # precomputed predictions for instant lookup
 cache: dict = {}
@@ -49,7 +51,7 @@ def sanitize(obj):
 
 def load_all():
     """Load model + user features + precomputed JSON cache."""
-    global model, scaler, feature_names, user_features, predictions_lookup, cache
+    global model, feature_names, preprocessor, calibrator, model_metadata, user_features, predictions_lookup, cache
 
     # Load precomputed cache (instant)
     for name in ["overview", "clusters", "propensity", "behavior_path", "products"]:
@@ -76,49 +78,60 @@ def load_all():
     user_features["user_id"] = user_features["user_id"].astype(str)
     print(f"  [OK] user_features: {user_features.shape}")
 
-    # Load model artifacts for live inference fallback
-    model = joblib.load(MODEL_DIR / "best_purchase_model.pkl")
-    scaler = joblib.load(MODEL_DIR / "scaler.pkl")
-    feature_names = joblib.load(MODEL_DIR / "feature_names.pkl")
-    print(f"  [OK] model loaded, {len(feature_names)} features")
+    # Load model artifacts for metadata/health. Online feature construction is
+    # intentionally not attempted here because the lightweight backend does not
+    # load raw click/order logs.
+    model_path = MODEL_DIR / "best_purchase_model.pkl"
+    preprocessor_path = MODEL_DIR / "preprocessor.pkl"
+    calibrator_path = MODEL_DIR / "calibrator.pkl"
+    metadata_path = MODEL_DIR / "model_metadata.json"
+    if model_path.exists():
+        model = joblib.load(model_path)
+    if preprocessor_path.exists():
+        preprocessor = joblib.load(preprocessor_path)
+        feature_names = getattr(preprocessor, "selected_feature_names", None)
+    elif (MODEL_DIR / "feature_names.pkl").exists():
+        feature_names = joblib.load(MODEL_DIR / "feature_names.pkl")
+    if calibrator_path.exists():
+        calibrator = joblib.load(calibrator_path)
+    if metadata_path.exists():
+        with open(metadata_path) as f:
+            model_metadata = json.load(f)
+    print(f"  [OK] model artifacts loaded, features={len(feature_names) if feature_names else 0}")
 
 
 def predict_for_users(user_ids: list[str]) -> dict:
-    """Get predictions — uses precomputed lookup when available, falls back to live inference."""
-    # Use precomputed lookup if available
+    """Get predictions from the precomputed lookup table.
+
+    The backend deliberately avoids fake online inference: constructing the
+    model features requires raw 30/60-day click/order windows and the persisted
+    training preprocessor, which is handled by prepare_dashboard_data.py.
+    """
     if predictions_lookup is not None:
         mask = predictions_lookup["user_id"].isin(user_ids)
         subset = predictions_lookup[mask]
+        found = set(subset["user_id"].tolist())
         return {
             "user_ids": subset["user_id"].tolist(),
             "probabilities": subset["purchase_probability"].tolist(),
             "predictions": subset["prediction_label"].tolist(),
+            "missing_user_ids": [uid for uid in user_ids if uid not in found],
         }
 
-    # Fall back to live inference
-    mask = user_features["user_id"].isin(user_ids)
-    uf_subset = user_features[mask].copy()
-    if len(uf_subset) == 0:
-        return {"user_ids": [], "probabilities": [], "predictions": []}
+    return {"user_ids": [], "probabilities": [], "predictions": [], "missing_user_ids": list(user_ids)}
 
-    available = [f for f in feature_names if f in uf_subset.columns]
-    missing = [f for f in feature_names if f not in uf_subset.columns]
-    X = uf_subset[available].values.astype(np.float64)
-    if missing:
-        X = np.hstack([X, np.zeros((X.shape[0], len(missing)))])
-    col_order = available + missing
-    idx_map = [col_order.index(f) for f in feature_names]
-    X = X[:, idx_map]
-    X_scaled = scaler.transform(X)
-    X_scaled = np.nan_to_num(X_scaled, 0.0)
-    proba = model.predict_proba(X_scaled)[:, 1]
-    pred = (proba >= 0.625).astype(int)
 
-    return {
-        "user_ids": uf_subset["user_id"].tolist(),
-        "probabilities": proba.tolist(),
-        "predictions": pred.tolist(),
-    }
+def segment_for_probability(prob: float) -> str:
+    """Use the dashboard cache's fitted segment cutoffs for consistent labels."""
+    propensity = cache.get("propensity", {})
+    cutoffs = propensity.get("segment_cutoffs", {})
+    threshold = cutoffs.get("threshold", model_metadata.get("threshold", 0.5))
+    high_cutoff = cutoffs.get("high_cutoff", max(float(threshold), 0.7))
+    if prob >= float(high_cutoff):
+        return "高倾向"
+    if prob >= float(threshold):
+        return "中倾向"
+    return "低倾向"
 
 
 # ── Lifespan ────────────────────────────────────────────────────────────────
@@ -207,20 +220,24 @@ async def propensity_segments():
 async def propensity_top_features():
     return cache.get("propensity", {}).get("top_features", [])
 
+@app.get("/api/propensity/strategy")
+async def propensity_strategy():
+    prop = cache.get("propensity", {})
+    return {
+        "summary": prop.get("strategy_summary", {}),
+        "operations": prop.get("operation_strategy", []),
+        "cutoffs": prop.get("segment_cutoffs", {}),
+    }
+
 @app.post("/api/propensity/predict")
 async def propensity_predict(req: UserIdsRequest):
     result = predict_for_users(req.user_ids)
     out = []
     for uid, prob, pred in zip(result["user_ids"], result["probabilities"], result["predictions"]):
-        if prob >= 0.7:
-            seg = "高倾向"
-        elif prob >= 0.3:
-            seg = "中倾向"
-        else:
-            seg = "低倾向"
+        seg = segment_for_probability(prob)
         out.append({"user_id": uid, "probability": round(prob, 4),
                      "prediction": pred, "segment": seg})
-    return out
+    return {"results": out, "missing_user_ids": result.get("missing_user_ids", [])}
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -352,12 +369,7 @@ async def user_detail(user_id: str):
     if pred_result["user_ids"]:
         prob = pred_result["probabilities"][0]
         pred = pred_result["predictions"][0]
-        if prob >= 0.7:
-            seg = "高倾向"
-        elif prob >= 0.3:
-            seg = "中倾向"
-        else:
-            seg = "低倾向"
+        seg = segment_for_probability(prob)
         user_info["prediction"] = {
             "probability": round(prob, 4),
             "prediction": pred,
@@ -370,8 +382,13 @@ async def health():
     return {
         "status": "ok",
         "model_loaded": model is not None,
+        "preprocessor_loaded": preprocessor is not None,
+        "calibrator_loaded": calibrator is not None,
         "users_loaded": user_features is not None,
+        "prediction_cache_loaded": predictions_lookup is not None,
         "features": len(feature_names) if feature_names else 0,
+        "threshold": model_metadata.get("threshold"),
+        "model_name": model_metadata.get("best_model_name"),
         "cache_keys": list(cache.keys()),
     }
 

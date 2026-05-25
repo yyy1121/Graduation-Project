@@ -479,6 +479,9 @@ def render_overview():
 
 def render_propensity():
     st.markdown('<p class="section-title">购买倾向分析</p>', unsafe_allow_html=True)
+    health = api_get("/api/health") or {}
+    threshold = health.get("threshold")
+    threshold_label = f"阈值 {threshold:.3f}" if isinstance(threshold, (int, float)) else "验证集阈值"
 
     left, right = st.columns([1, 1])
 
@@ -486,6 +489,15 @@ def render_propensity():
         # Prediction distribution
         dist = api_get("/api/propensity/distribution")
         if dist:
+            threshold_x = 0
+            if isinstance(threshold, (int, float)):
+                for idx, row in enumerate(dist):
+                    left_edge = row.get("left")
+                    right_edge = row.get("right")
+                    if isinstance(left_edge, (int, float)) and isinstance(right_edge, (int, float)) and left_edge <= threshold <= right_edge:
+                        ratio = (threshold - left_edge) / (right_edge - left_edge) if right_edge > left_edge else 0
+                        threshold_x = max(-0.5, min(len(dist) - 0.5, idx - 0.5 + ratio))
+                        break
             fig = go.Figure(go.Bar(
                 x=[d["bin"] for d in dist],
                 y=[d["count"] for d in dist],
@@ -504,8 +516,8 @@ def render_propensity():
             ))
             fig = chart_layout(fig, "预测概率分布 (10K 用户样本)", height=380)
             fig.add_vline(
-                x=6.5, line_dash="dash", line_color="#c9a96e", line_width=1.5,
-                annotation=dict(text="阈值 0.625", font=dict(color="#c9a96e", size=11)),
+                x=threshold_x, line_dash="dash", line_color="#c9a96e", line_width=1.5,
+                annotation=dict(text=threshold_label, font=dict(color="#c9a96e", size=11)),
             )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
@@ -542,9 +554,13 @@ def render_propensity():
     top_feats = api_get("/api/propensity/top-features")
     if top_feats:
         feat_df = pd.DataFrame(top_feats).sort_values("importance", ascending=True)
+        has_shap = feat_df["direction"].isin(["促进购买", "抑制购买"]).any()
 
         fig = go.Figure()
-        colors = ["#c9a96e" if d["direction"] == "促进购买" else "#c97e4f" for d in top_feats]
+        colors = [
+            "#c9a96e" if row.get("direction") == "促进购买" else ("#c97e4f" if has_shap else "#7b8ca8")
+            for row in top_feats
+        ]
         colors.reverse()
 
         fig.add_trace(go.Bar(
@@ -552,8 +568,7 @@ def render_propensity():
             x=feat_df["importance"].tolist(),
             orientation="h",
             marker=dict(color=colors, line=dict(width=0)),
-            text=[f"{v:.3f}  {d['direction']}" for v, d in zip(feat_df["importance"].tolist(),
-                     feat_df["description"].tolist())],
+            text=[f"{row.importance:.3f}  {row.direction}" for row in feat_df.itertuples()],
             textposition="outside",
             textfont=dict(color="#9895a0", size=11),
             hovertemplate="%{y}<br>SHAP: %{x:.4f}<br>%{text}<extra></extra>",
@@ -574,9 +589,16 @@ def render_propensity():
             ids = [u.strip() for u in user_input.replace("\n", ",").split(",") if u.strip()]
             if ids:
                 with st.spinner("预测中..."):
-                    results = api_post("/api/propensity/predict", {"user_ids": ids})
-                if results:
+                    payload = api_post("/api/propensity/predict", {"user_ids": ids})
+                if payload:
+                    results = payload if isinstance(payload, list) else payload.get("results", [])
+                    missing = [] if isinstance(payload, list) else payload.get("missing_user_ids", [])
+                    if missing:
+                        st.warning("无预计算结果：" + ", ".join(missing))
                     df = pd.DataFrame(results)
+                    if df.empty:
+                        st.warning("未找到匹配用户")
+                        return
                     df["probability"] = df["probability"].apply(lambda x: f"{x:.4f}")
                     st.dataframe(
                         df,

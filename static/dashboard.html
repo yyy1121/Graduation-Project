@@ -223,6 +223,71 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .chart-plot.h460 { min-height: 460px; }
 .chart-plot.h500 { min-height: 500px; }
 
+/* ── Propensity workspace ─────────────────────────────────────────────── */
+
+.propensity-brief {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; margin-bottom: 1rem;
+}
+.propensity-note {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 1rem 1.2rem; box-shadow: var(--shadow-sm);
+}
+.propensity-note strong {
+  display: block; font-family: var(--font-display); font-size: 1.05rem;
+  color: var(--text-primary); margin-bottom: 0.25rem;
+}
+.propensity-note span {
+  color: var(--text-secondary); font-size: 0.78rem; line-height: 1.8;
+}
+.strategy-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; margin-bottom: 1rem;
+}
+.strategy-card {
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 1rem; box-shadow: var(--shadow-sm);
+}
+.strategy-card.high { border-top: 3px solid var(--accent-crimson); }
+.strategy-card.mid { border-top: 3px solid var(--accent-gold); }
+.strategy-card.low { border-top: 3px solid var(--accent-steel); }
+.strategy-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.strategy-name {
+  font-family: var(--font-display); font-size: 1rem; font-weight: 600;
+  color: var(--text-primary);
+}
+.strategy-rule {
+  font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted);
+  letter-spacing: 0.04em; margin-top: 0.1rem;
+}
+.strategy-count {
+  font-family: var(--font-display); font-size: 1.4rem; color: var(--text-primary); line-height: 1;
+  text-align: right;
+}
+.strategy-count span {
+  display: block; font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted); margin-top: 0.25rem;
+}
+.strategy-body {
+  display: grid; gap: 0.45rem; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.65;
+}
+.strategy-body b {
+  color: var(--text-primary); font-weight: 500;
+}
+.strategy-actions {
+  display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem;
+}
+.mini-pill {
+  display: inline-flex; align-items: center; border: 1px solid var(--border-subtle);
+  border-radius: 999px; padding: 0.14rem 0.5rem; background: var(--bg-card);
+  font-family: var(--font-mono); font-size: 0.56rem; color: var(--text-secondary);
+  letter-spacing: 0.04em; max-width: 100%; white-space: normal; line-height: 1.45;
+}
+.propensity-layout {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 1rem; margin-bottom: 1rem;
+}
+
 /* ── Tables ───────────────────────────────────────────────────────────── */
 
 .data-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.7rem; }
@@ -313,6 +378,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 
 @media (max-width: 1200px) {
   .chart-row { grid-template-columns: 1fr; }
+  .propensity-brief, .propensity-layout, .strategy-grid { grid-template-columns: 1fr; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .sidebar { width: 190px; min-width: 190px; }
   .main-content { padding: 1.5rem; }
@@ -525,32 +591,127 @@ async function renderOverview(main) {
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 
 async function renderPropensity(main) {
-  const [dist, segs, topFeats] = await Promise.all([
+  const [dist, segs, topFeats, health, strategy] = await Promise.all([
     fetchAPI('/propensity/distribution'), fetchAPI('/propensity/segments'), fetchAPI('/propensity/top-features'),
+    fetchAPI('/health'), fetchAPI('/propensity/strategy'),
   ]);
+  let summary = strategy?.summary || {};
+  let operations = Array.isArray(strategy?.operations) ? strategy.operations : [];
+  const threshold = Number(health?.threshold);
+  const thresholdText = Number.isFinite(threshold) ? `阈值 ${threshold.toFixed(3)}` : '验证集阈值';
+  const thresholdX = (() => {
+    if (!Number.isFinite(threshold) || !Array.isArray(dist) || !dist.length) return 0;
+    const idx = dist.findIndex(d => Number.isFinite(Number(d.left)) && Number.isFinite(Number(d.right)) && threshold >= Number(d.left) && threshold <= Number(d.right));
+    if (idx >= 0) {
+      const left = Number(dist[idx].left), right = Number(dist[idx].right);
+      const ratio = right > left ? (threshold - left) / (right - left) : 0;
+      return Math.max(-0.5, Math.min(dist.length - 0.5, idx - 0.5 + ratio));
+    }
+    return Math.max(-0.5, Math.min(dist.length - 0.5, threshold * dist.length - 0.5));
+  })();
+  const segmentClass = seg => String(seg || '').includes('高') ? 'tag-crimson' : String(seg || '').includes('中') ? 'tag-gold' : 'tag-steel';
+  const fillClass = seg => String(seg || '').includes('高') ? 'high' : String(seg || '').includes('中') ? 'mid' : 'low';
+  const hasShap = Array.isArray(topFeats) && topFeats.some(d => Number(d.importance) > 0 && !['模型重要性', '待重新训练后生成'].includes(d.direction));
+  const hasImportance = Array.isArray(topFeats) && topFeats.some(d => Number(d.importance) > 0);
+  const shapSubtitle = hasShap ? 'Top 15 特征 — 基于测试窗口 SHAP 解释' : (hasImportance ? '保留 SHAP 区域；当前缓存未生成 SHAP，显示模型内置重要性回退' : '保留 SHAP 区域；当前缓存未生成解释值');
+  const fmtPct = v => Number.isFinite(Number(v)) ? `${(Number(v) * 100).toFixed(1)}%` : 'N/A';
+  const fmtRate = v => Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)}%` : 'N/A';
+  const fmtNum = v => Number.isFinite(Number(v)) ? Number(v).toLocaleString('zh-CN') : 'N/A';
+  const clsBySeg = seg => String(seg || '').includes('高') ? 'high' : String(seg || '').includes('中') ? 'mid' : 'low';
+  const totalUsers = Array.isArray(segs) ? segs.reduce((sum, s) => sum + (Number(s.count) || 0), 0) : 0;
+  const parseCutoff = text => {
+    const nums = String(text || '').match(/\\d+\\.\\d+/g);
+    return nums && nums.length ? Number(nums[nums.length - 1]) : null;
+  };
+  if (!operations.length && Array.isArray(segs) && segs.length) {
+    const highSeg = segs.find(s => String(s.segment).includes('高')) || {};
+    const midSeg = segs.find(s => String(s.segment).includes('中')) || {};
+    const lowSeg = segs.find(s => String(s.segment).includes('低')) || {};
+    const fallbackHighCutoff = parseCutoff(highSeg.segment);
+    summary = {
+      ...summary,
+      model_name: summary.model_name || health?.model_name || 'XGBoost',
+      threshold: summary.threshold ?? threshold,
+      high_cutoff: summary.high_cutoff ?? fallbackHighCutoff,
+      predicted_positive_count: summary.predicted_positive_count ?? ((Number(highSeg.count) || 0) + (Number(midSeg.count) || 0)),
+      predicted_positive_pct: summary.predicted_positive_pct ?? ((Number(highSeg.pct) || 0) + (Number(midSeg.pct) || 0)),
+    };
+    operations = [
+      { segment: '高倾向', rule: highSeg.segment || 'Top10 优先触达', count: highSeg.count || 0, pct: highSeg.pct || 0, priority: '优先触达', action: '会员权益、限时券、购物车/浏览商品提醒', expected: '高概率优先转化', risk: '控制补贴强度' },
+      { segment: '中倾向', rule: midSeg.segment || `${thresholdText} 以上`, count: midSeg.count || 0, pct: midSeg.pct || 0, priority: '培育转化', action: '低成本站内信、相似商品推荐、价格/评价信息补全', expected: '覆盖阈值以上候选人群', risk: '避免直接发高额券' },
+      { segment: '低倾向', rule: lowSeg.segment || `${thresholdText} 以下`, count: lowSeg.count || 0, pct: lowSeg.pct || 0, priority: '低频维护', action: '品牌曝光、内容种草、节日大促统一触达', expected: '保留低成本触达', risk: '定期刷新窗口' },
+    ];
+  }
+  const metricCards = [
+    { label: '模型', value: summary.model_name || health?.model_name || 'N/A', sub: `${thresholdText} · 已校准概率` },
+    { label: '预测触达', value: fmtNum(summary.predicted_positive_count), sub: `${fmtRate(summary.predicted_positive_pct)} 用户进入转化名单` },
+    { label: '高倾向边界', value: Number.isFinite(Number(summary.high_cutoff)) ? Number(summary.high_cutoff).toFixed(3) : 'N/A', sub: `Top10 Precision ${fmtPct(summary.top10_precision)}` },
+    { label: '测试表现', value: Number.isFinite(Number(summary.auc)) ? summary.auc.toFixed(3) : 'N/A', sub: `AP ${Number.isFinite(Number(summary.ap)) ? summary.ap.toFixed(3) : 'N/A'} · Recall ${fmtPct(summary.recall)}` },
+  ];
 
   main.innerHTML = `
     <div class="page-header">
       <div class="section-label">Module 02</div>
       <h1 class="display-title">购买倾向<em>分析</em></h1>
     </div>
-    <div class="chart-row">
-      <div class="chart-panel animate-in stagger-1"><div class="chart-title">预测概率分布</div><div class="chart-subtitle">基于 100,000 用户全量预测</div><div class="chart-plot h340" id="chart-dist"></div></div>
-      <div class="chart-panel animate-in stagger-2"><div class="chart-title">购买倾向分层</div><div class="chart-plot h340" id="chart-segs"></div></div>
+
+    <div class="propensity-brief animate-in stagger-1">
+      <div class="propensity-note">
+        <strong>当前运营口径：阈值转化名单 + Top10 优先触达</strong>
+        <span>当前使用校准概率进行运营分层：低倾向表示低于模型阈值，中倾向表示阈值以上但未进入 Top10，高倾向表示最值得优先投放的 Top10 人群。</span>
+      </div>
+      <div class="propensity-note">
+        <strong>成本提示</strong>
+        <span>当前阈值偏召回，适合大促前圈人；日常优惠券投放应优先使用高倾向或 Top20，而不是把所有阈值以上用户都作为同等预算对象。</span>
+      </div>
     </div>
-    <div class="chart-panel animate-in stagger-3" style="margin-bottom:1rem;">
-      <div class="chart-title">关键特征重要性 (SHAP)</div>
-      <div class="chart-subtitle">Top 15 特征 — 品牌偏好集中度是最强预测信号</div>
-      <div class="chart-plot h500" id="chart-shap"></div>
+
+    <div class="kpi-grid animate-in stagger-2">
+      ${metricCards.map((m, i) => `
+        <div class="kpi-card">
+          <div class="kpi-label">${m.label}</div>
+          <div class="kpi-value ${i === 1 ? 'accent' : ''}">${m.value}</div>
+          <div class="kpi-subtitle">${m.sub}</div>
+        </div>`).join('')}
     </div>
-    <div class="chart-panel animate-in stagger-4">
+
+    <div class="strategy-grid animate-in stagger-3">
+      ${operations.map(op => `
+        <div class="strategy-card ${clsBySeg(op.segment)}">
+          <div class="strategy-head">
+            <div>
+              <div class="strategy-name">${op.segment}</div>
+              <div class="strategy-rule">${op.rule}</div>
+            </div>
+            <div class="strategy-count">${fmtNum(op.count)}<span>${fmtRate(op.pct)} 用户</span></div>
+          </div>
+          <div class="strategy-actions"><span class="mini-pill">${op.priority}</span><span class="mini-pill">${op.expected}</span></div>
+          <div class="strategy-body">
+            <div><b>动作</b>：${op.action}</div>
+            <div><b>风险</b>：${op.risk}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <div class="propensity-layout">
+      <div class="chart-panel animate-in stagger-4"><div class="chart-title">校准概率分布</div><div class="chart-subtitle">动态分箱，虚线为当前业务阈值</div><div class="chart-plot h340" id="chart-dist"></div></div>
+      <div class="chart-panel animate-in stagger-4"><div class="chart-title">运营分层规模</div><div class="chart-subtitle">高倾向 / 中倾向 / 低倾向</div><div class="chart-plot h340" id="chart-segs"></div></div>
+    </div>
+
+    <div class="chart-panel animate-in stagger-5" style="margin-bottom:1rem;">
       <div class="chart-title">批量预测查询</div>
-      <div class="chart-subtitle">输入 User ID（逗号分隔），获取实时购买倾向预测 · 阈值 0.625</div>
+      <div class="chart-subtitle">返回概率、预测标签和运营分层；不存在的用户会单独列出</div>
       <div style="display:flex;gap:0.6rem;margin-bottom:0.6rem;">
         <input type="text" id="batchInput" class="input-field" placeholder="e.g. 0, 100, 50000, 99999">
         <button id="batchBtn" class="btn-primary">执行预测</button>
       </div>
       <div id="batchResults"></div>
+    </div>
+
+    <div class="chart-panel animate-in stagger-6">
+      <div class="chart-title">SHAP 解释与关键特征</div>
+      <div class="chart-subtitle">${shapSubtitle}</div>
+      <div class="chart-plot h500" id="chart-shap"></div>
     </div>`;
 
   // Distribution — bar chart
@@ -559,16 +720,53 @@ async function renderPropensity(main) {
     marker: { color: dist.map((_,i) => CHART_COLORS[i % CHART_COLORS.length]), line: { width: 0 } },
   }], {
     margin: { b: 80 },
-    shapes: [{ type: 'line', x0: 6.5, x1: 6.5, y0: 0, y1: 1, yref: 'paper', line: { dash: 'dash', color: GOLD, width: 1.5 } }],
-    annotations: [{ text: '阈值 0.625', x: 6.5, y: 1, yref: 'paper', showarrow: false, font: { color: GOLD, size: 10 }, xanchor: 'right' }],
+    shapes: [{ type: 'line', x0: thresholdX, x1: thresholdX, y0: 0, y1: 1, yref: 'paper', line: { dash: 'dash', color: GOLD, width: 1.5 } }],
+    annotations: [{ text: thresholdText, x: thresholdX, y: 1, yref: 'paper', showarrow: false, font: { color: GOLD, size: 10 }, xanchor: 'right' }],
   });
 
-  // Segments — donut
-  if (segs) draw('chart-segs', [{
-    type: 'pie', hole: 0.6, labels: segs.map(s=>s.segment), values: segs.map(s=>s.count),
-    marker: { colors: [GOLD, STEEL, CRIMSON] }, textinfo: 'label+percent',
-    textfont: { color: '#1a1815', size: 11 }, sort: false,
-  }], { margin: { l: 10, r: 10, t: 30, b: 10 } });
+  // Segments — upright pyramid with labels in the upper-right legend
+  if (segs) {
+    const pyramidColors = [CRIMSON, GOLD, STEEL];
+    const pyramid = segs.map((s, i) => ({ ...s, color: pyramidColors[i] }));
+    const visualWidths = [0.36, 0.72, 1.08];
+    const topWidths = [0.12, 0.44, 0.80];
+    const gap = 0.045;
+    const levels = pyramid.map((s, i) => {
+      const yTop = pyramid.length - i - gap * i;
+      const yBottom = pyramid.length - i - 1 + gap * (pyramid.length - i - 1);
+      const topWidth = topWidths[i];
+      const bottomWidth = visualWidths[i];
+      return {
+        type: 'scatter',
+        mode: 'lines',
+        fill: 'toself',
+        name: s.segment,
+        x: [-topWidth / 2, topWidth / 2, bottomWidth / 2, -bottomWidth / 2, -topWidth / 2],
+        y: [yTop, yTop, yBottom, yBottom, yTop],
+        line: { color: '#ffffff', width: 2 },
+        fillcolor: s.color,
+        hovertemplate: `${s.segment}<br>用户数: ${Number(s.count || 0).toLocaleString('zh-CN')}<br>占比: ${Number(s.pct || 0).toFixed(1)}%<extra></extra>`,
+      };
+    });
+    const annotations = pyramid.map((s, i) => ({
+      x: 0,
+      y: pyramid.length - i - 0.48,
+      text: `<b>${Number(s.pct || 0).toFixed(1)}%</b>`,
+      showarrow: false,
+      font: { color: '#1a1815', size: 12, family: 'JetBrains Mono, Noto Sans SC' },
+    }));
+    draw('chart-segs', levels, {
+      height: 340,
+      margin: { l: 20, r: 165, t: 18, b: 18 },
+    showlegend: true,
+    legend: { orientation: 'v', x: 1.02, y: 1, xanchor: 'left', yanchor: 'top', font: { size: 10, color: '#5c5852' } },
+    hovermode: 'closest',
+    annotations,
+    xaxis: { visible: false, range: [-0.62, 0.62], fixedrange: true },
+    yaxis: { visible: false, range: [0, pyramid.length + 0.08], fixedrange: true },
+    hoverlabel: { bgcolor: '#ffffff', bordercolor: '#d9d3c7', font: { color: '#1a1815', size: 12 } },
+    });
+  }
 
   // SHAP — horizontal bar chart with extra left margin for feature names
   if (topFeats) {
@@ -576,15 +774,16 @@ async function renderPropensity(main) {
     draw('chart-shap', [{
       type: 'bar', orientation: 'h',
       y: sorted.map(d=>d.feature),
-      x: sorted.map(d=>d.importance),
-      marker: { color: sorted.map(d=>d.direction==='促进购买'?GOLD:CRIMSON), line: { width: 0 } },
-      text: sorted.map(d=>`${d.importance.toFixed(3)}  ${d.direction}`),
-      textposition: 'outside', textfont: { color: '#5c5852', size: 10 },
+      x: sorted.map(d=>Number(d.importance) || 0),
+      marker: { color: sorted.map(d=>d.direction==='促进购买'?GOLD:(d.direction==='抑制购买'?CRIMSON:STEEL)), line: { width: 0 } },
+      customdata: sorted.map(d=>[d.direction || 'SHAP重要性', d.description || '']),
+      hovertemplate: '%{y}<br>重要性: %{x:.4f}<br>%{customdata[0]}<extra></extra>',
     }], {
       height: 480,
       margin: { l: 200, r: 140, t: 20, b: 30 },
-      xaxis: { title: { text: 'SHAP Importance', font: { size: 11 } }, gridcolor: '#e8e3da', zeroline: true, linecolor: '#d9d3c7' },
+      xaxis: { title: { text: hasShap ? 'SHAP Importance' : 'Model Feature Importance', font: { size: 11 } }, gridcolor: '#e8e3da', zeroline: true, linecolor: '#d9d3c7' },
       yaxis: { automargin: true },
+      hoverlabel: { bgcolor: '#ffffff', bordercolor: '#d9d3c7', font: { color: '#1a1815', size: 12 } },
     });
   }
 
@@ -593,19 +792,22 @@ async function renderPropensity(main) {
     const input = document.getElementById('batchInput').value.trim();
     if (!input) return;
     const ids = input.split(/[,，\s]+/).filter(Boolean);
-    const results = await fetchPost('/propensity/predict', { user_ids: ids });
+    const payload = await fetchPost('/propensity/predict', { user_ids: ids });
+    const results = Array.isArray(payload) ? payload : (payload?.results || []);
+    const missing = Array.isArray(payload?.missing_user_ids) ? payload.missing_user_ids : [];
     const container = document.getElementById('batchResults');
     if (!results || !results.length) {
-      container.innerHTML = '<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">未找到匹配用户</div>';
+      container.innerHTML = `<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">未找到匹配用户${missing.length ? `：${missing.join(', ')}` : ''}</div>`;
       return;
     }
-    container.innerHTML = `<table class="data-table"><thead><tr><th>User ID</th><th>购买概率</th><th>倾向</th><th>预测</th><th>概率条</th></tr></thead>
+    container.innerHTML = `${missing.length ? `<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;margin-bottom:0.5rem;">无预计算结果：${missing.join(', ')}</div>` : ''}
+      <table class="data-table"><thead><tr><th>User ID</th><th>购买概率</th><th>倾向</th><th>预测</th><th>概率条</th></tr></thead>
       <tbody>${results.map(r => `<tr>
         <td style="color:var(--text-primary)">${r.user_id}</td>
         <td style="color:var(--accent-gold);font-weight:500;">${(r.probability*100).toFixed(1)}%</td>
-        <td><span class="tag ${r.probability>=0.7?'tag-crimson':r.probability>=0.3?'tag-gold':'tag-steel'}">${r.segment}</span></td>
+        <td><span class="tag ${segmentClass(r.segment)}">${r.segment}</span></td>
         <td>${r.prediction?'✓ 会购买':'— 未购买'}</td>
-        <td><div class="prediction-bar"><div class="prediction-fill ${r.probability>=0.7?'high':r.probability>=0.3?'mid':'low'}" style="width:${Math.max(1, (r.probability*100).toFixed(0))}%"></div></div></td>
+        <td><div class="prediction-bar"><div class="prediction-fill ${fillClass(r.segment)}" style="width:${Math.max(1, (r.probability*100).toFixed(0))}%"></div></div></td>
       </tr>`).join('')}</tbody></table>`;
   });
 }
@@ -647,11 +849,17 @@ async function renderBehavior(main) {
   // Time distribution
   if (timeDist) draw('chart-time', [
     { type: 'bar', x: timeDist.map(d=>d.bin), y: timeDist.map(d=>d.count),
-      marker: { color: GOLD, line: { width: 0 } }, name: '转化量' },
+      marker: { color: GOLD, line: { width: 0 } }, name: '转化量',
+      hovertemplate: '时间区间: %{x}<br>转化量: %{y:,}<extra></extra>' },
     { type: 'scatter', x: timeDist.map(d=>d.bin), y: timeDist.map(d=>d.count),
       mode: 'lines+markers', line: { color: CRIMSON, width: 2 },
-      marker: { color: CRIMSON, size: 7, symbol: 'diamond' }, name: '趋势', showlegend: false },
-  ], { margin: { b: 70 }, showlegend: false });
+      marker: { color: CRIMSON, size: 7, symbol: 'diamond' }, name: '趋势', showlegend: false,
+      hovertemplate: '时间区间: %{x}<br>转化量: %{y:,}<extra></extra>' },
+  ], {
+    margin: { b: 70 },
+    showlegend: false,
+    hoverlabel: { bgcolor: '#ffffff', bordercolor: '#d9d3c7', font: { color: '#1a1815', size: 12 } },
+  });
 
   // Category funnel — DUAL x-axes because clicks ≈ 70× orders
   if (funnel) {
@@ -779,11 +987,13 @@ async function renderSegments(main) {
       text: zData.map(row => row.map(v => (v*100).toFixed(1)+'%')),
       texttemplate: '%{text}',
       textfont: { color: '#1a1815', size: 10 },
+      hovertemplate: '群组: %{y}<br>品类: %{x}<br>占比: %{z:.1%}<extra></extra>',
       hoverongaps: false,
     }], {
       margin: { l: 80, r: 30, t: 30, b: 100 },
       xaxis: { tickangle: -30, automargin: true },
       yaxis: { automargin: true },
+      hoverlabel: { bgcolor: '#ffffff', bordercolor: '#d9d3c7', font: { color: '#1a1815', size: 12 } },
     });
   }
 }
