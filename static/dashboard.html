@@ -4,9 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>洞察 — 电商用户画像与购买预测系统</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -42,9 +39,11 @@
   --radius-sm: 3px;
   --radius-md: 6px;
   --radius-lg: 12px;
-  --font-display: 'Playfair Display', 'Noto Serif SC', 'Georgia', serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
-  --font-ui: 'Noto Sans SC', -apple-system, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", sans-serif;
+  --font-display: var(--font-ui);
+  --font-data: var(--font-ui);
   --transition-fast: 180ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -62,7 +61,7 @@ html {
 
 body {
   font-family: var(--font-ui);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.65;
   min-height: 100vh;
   background: linear-gradient(180deg, #fdfcfa 0%, var(--bg-canvas) 15%, var(--bg-canvas) 100%);
@@ -75,19 +74,19 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.01em; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0; }
 
 .display-title {
   font-family: var(--font-display);
   font-size: clamp(2.2rem, 4vw, 3.4rem);
-  font-weight: 400; line-height: 1.05; letter-spacing: -0.02em;
+  font-weight: 600; line-height: 1.08; letter-spacing: 0;
   color: var(--text-primary);
 }
-.display-title em { font-style: italic; color: var(--accent-gold); }
+.display-title em { font-style: normal; color: var(--accent-gold); }
 
 .section-label {
-  font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-muted);
+  font-family: var(--font-data); font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
 }
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
@@ -107,7 +106,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 }
 .sidebar-brand span {
   color: var(--text-muted); font-size: 0.62rem; display: block;
-  font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.12em; margin-top: 0.15rem;
+  font-family: var(--font-data); font-weight: 400; letter-spacing: 0.12em; margin-top: 0.15rem;
 }
 
 .nav-item {
@@ -127,13 +126,13 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 
 .search-box { margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-subtle); }
 .search-label {
-  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em;
+  font-family: var(--font-data); font-size: 0.56rem; letter-spacing: 0.14em;
   color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase;
 }
 .search-input {
   width: 100%; background: var(--bg-canvas); border: 1px solid var(--border-mid);
   border-radius: var(--radius-sm); padding: 0.45rem 0.65rem; color: var(--text-primary);
-  font-family: var(--font-mono); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
+  font-family: var(--font-data); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
 }
 .search-input:focus { border-color: var(--accent-gold); box-shadow: 0 0 0 3px var(--accent-gold-bg); }
 .search-input::placeholder { color: var(--text-muted); }
@@ -145,7 +144,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 }
 .search-result.visible { display: block; animation: fadeUp 0.3s ease; }
 .search-result .sr-name { color: var(--accent-gold); font-weight: 600; }
-.search-result .sr-stat { color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.66rem; margin-top: 0.12rem; }
+.search-result .sr-stat { color: var(--text-secondary); font-family: var(--font-data); font-size: 0.66rem; margin-top: 0.12rem; }
 
 /* ── Main ─────────────────────────────────────────────────────────────── */
 
@@ -180,16 +179,17 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .kpi-card:hover::after { transform: scaleX(1); }
 
 .kpi-label {
-  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.13em;
+  font-family: var(--font-data); font-size: 0.56rem; letter-spacing: 0.13em;
   color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.2rem;
 }
 .kpi-value {
   font-family: var(--font-display); font-size: 1.7rem; font-weight: 600;
-  color: var(--text-primary); letter-spacing: -0.01em; line-height: 1;
+  color: var(--text-primary); letter-spacing: 0; line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .kpi-value.accent { color: var(--accent-gold); }
 .kpi-subtitle {
-  font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.3rem;
+  font-family: var(--font-data); font-size: 0.65rem; color: var(--text-secondary); margin-top: 0.3rem;
 }
 
 /* ── Chart panels ─────────────────────────────────────────────────────── */
@@ -212,7 +212,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
   color: var(--text-primary); margin-bottom: 0.15rem; letter-spacing: 0.02em;
 }
 .chart-subtitle {
-  font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted);
+  font-family: var(--font-data); font-size: 0.6rem; color: var(--text-muted);
   letter-spacing: 0.06em; margin-bottom: 0.5rem;
 }
 
@@ -258,15 +258,15 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
   color: var(--text-primary);
 }
 .strategy-rule {
-  font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted);
+  font-family: var(--font-data); font-size: 0.58rem; color: var(--text-muted);
   letter-spacing: 0.04em; margin-top: 0.1rem;
 }
 .strategy-count {
   font-family: var(--font-display); font-size: 1.4rem; color: var(--text-primary); line-height: 1;
-  text-align: right;
+  text-align: right; font-variant-numeric: tabular-nums;
 }
 .strategy-count span {
-  display: block; font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted); margin-top: 0.25rem;
+  display: block; font-family: var(--font-data); font-size: 0.58rem; color: var(--text-muted); margin-top: 0.25rem;
 }
 .strategy-body {
   display: grid; gap: 0.45rem; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.65;
@@ -280,7 +280,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .mini-pill {
   display: inline-flex; align-items: center; border: 1px solid var(--border-subtle);
   border-radius: 999px; padding: 0.14rem 0.5rem; background: var(--bg-card);
-  font-family: var(--font-mono); font-size: 0.56rem; color: var(--text-secondary);
+  font-family: var(--font-data); font-size: 0.56rem; color: var(--text-secondary);
   letter-spacing: 0.04em; max-width: 100%; white-space: normal; line-height: 1.45;
 }
 .propensity-layout {
@@ -290,7 +290,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 
 /* ── Tables ───────────────────────────────────────────────────────────── */
 
-.data-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.7rem; }
+.data-table {
+  width: 100%; border-collapse: collapse; font-family: var(--font-data); font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
 .data-table thead { border-bottom: 2px solid var(--border-mid); }
 .data-table th {
   text-align: left; padding: 0.5rem 0.65rem; color: var(--text-muted);
@@ -305,7 +308,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 
 .tag {
   display: inline-block; padding: 0.1rem 0.5rem; border-radius: 2px;
-  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.07em; font-weight: 500;
+  font-family: var(--font-data); font-size: 0.56rem; letter-spacing: 0.07em; font-weight: 500;
 }
 .tag-gold { background: var(--accent-gold-bg); color: var(--accent-gold); border: 1px solid var(--accent-gold-border); }
 .tag-steel { background: var(--accent-steel-bg); color: var(--accent-steel); border: 1px solid rgba(90,122,138,0.2); }
@@ -316,7 +319,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .expand-toggle {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.9rem;
   background: var(--bg-surface); border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-mono);
+  border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-data);
   font-size: 0.7rem; color: var(--text-secondary); letter-spacing: 0.05em;
   transition: all var(--transition-fast); margin-top: 0.8rem; box-shadow: var(--shadow-sm);
 }
@@ -336,14 +339,14 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 
 .btn-primary {
   background: var(--accent-gold); color: white; border: none; border-radius: var(--radius-sm);
-  padding: 0.45rem 1.2rem; font-family: var(--font-mono); font-size: 0.7rem;
+  padding: 0.45rem 1.2rem; font-family: var(--font-data); font-size: 0.7rem;
   letter-spacing: 0.07em; cursor: pointer; font-weight: 500; transition: all var(--transition-fast);
 }
 .btn-primary:hover { background: var(--accent-gold-light); }
 
 .btn-ghost {
   background: transparent; color: var(--accent-gold); border: 1px solid var(--accent-gold-border);
-  border-radius: var(--radius-sm); padding: 0.45rem 1.1rem; font-family: var(--font-mono);
+  border-radius: var(--radius-sm); padding: 0.45rem 1.1rem; font-family: var(--font-data);
   font-size: 0.7rem; letter-spacing: 0.07em; cursor: pointer; transition: all var(--transition-fast);
 }
 .btn-ghost:hover { background: var(--accent-gold-bg); }
@@ -351,7 +354,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .input-field {
   flex: 1; background: var(--bg-canvas); border: 1px solid var(--border-mid);
   border-radius: var(--radius-sm); padding: 0.45rem 0.65rem; color: var(--text-primary);
-  font-family: var(--font-mono); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
+  font-family: var(--font-data); font-size: 0.76rem; outline: none; transition: all var(--transition-fast);
 }
 .input-field:focus { border-color: var(--accent-gold); box-shadow: 0 0 0 3px var(--accent-gold-bg); }
 
@@ -424,6 +427,8 @@ const GOLD = '#a8893c', GOLD_LIGHT = '#c9a54e', STEEL = '#5a7a8a';
 const CRIMSON = '#c1665a', SAGE = '#6b8a5e', BRONZE = '#8b7355';
 const CHART_COLORS = [GOLD, STEEL, BRONZE, CRIMSON, SAGE, '#8b7d9e', '#6b95a8', '#c9a54e'];
 const PLOTLY_CONFIG = { displayModeBar: false, responsive: true, displaylogo: false };
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+const CLUSTER_COLORS = [STEEL, GOLD, CRIMSON, SAGE, '#8b7d9e', '#6b95a8'];
 
 // Base layout with generous margins so labels never clip
 function baseLayout(overrides = {}) {
@@ -431,7 +436,7 @@ function baseLayout(overrides = {}) {
   const base = {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#5c5852', size: 11, family: 'JetBrains Mono, Noto Sans SC' },
+    font: { color: '#5c5852', size: 11, family: FONT_FAMILY },
     margin: { l: 60, r: 30, t: 30, b: 70 },
     xaxis: { gridcolor: '#e8e3da', zeroline: false, linecolor: '#d9d3c7', automargin: true },
     yaxis: { gridcolor: '#e8e3da', zeroline: false, linecolor: '#d9d3c7', automargin: true },
@@ -465,6 +470,36 @@ function draw(id, data, layoutOverrides = {}) {
   const el = document.getElementById(id);
   if (!el) { console.warn(`draw: element #${id} not found`); return; }
   Plotly.newPlot(id, data, baseLayout(layoutOverrides), PLOTLY_CONFIG);
+}
+
+function formatNumber(value, digits = 0) {
+  return Number(value || 0).toLocaleString('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function clusterRole(c, clusters) {
+  const orderRate = Number(c.order_rate || 0);
+  const avgM = Number(c.avg_M || 0);
+  const avgF = Number(c.avg_F || 0);
+  const avgClicks = Number(c.avg_clicks || 0);
+  const maxM = Math.max(...clusters.map(d => Number(d.avg_M || 0)), 1);
+  const maxF = Math.max(...clusters.map(d => Number(d.avg_F || 0)), 1);
+
+  if (orderRate >= 0.8 && avgM >= maxM * 0.6) return '高价值用户';
+  if (orderRate >= 0.8 && (avgF >= maxF * 0.3 || avgM > 0)) return '活跃购买用户';
+  if (orderRate < 0.05 && avgClicks <= 1 && avgM < 1) return '沉睡/无行为用户';
+  if (orderRate < 0.05 && avgClicks > 1) return '浏览未转化用户';
+  return '低频维护用户';
+}
+
+function clusterMeta(clusters) {
+  return (clusters || []).map((c, i) => ({
+    ...c,
+    role: clusterRole(c, clusters || []),
+    color: CLUSTER_COLORS[i % CLUSTER_COLORS.length],
+  }));
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────
@@ -753,7 +788,7 @@ async function renderPropensity(main) {
       y: pyramid.length - i - 0.48,
       text: `<b>${Number(s.pct || 0).toFixed(1)}%</b>`,
       showarrow: false,
-      font: { color: '#1a1815', size: 12, family: 'JetBrains Mono, Noto Sans SC' },
+      font: { color: '#1a1815', size: 12, family: FONT_FAMILY },
     }));
     draw('chart-segs', levels, {
       height: 340,
@@ -797,10 +832,10 @@ async function renderPropensity(main) {
     const missing = Array.isArray(payload?.missing_user_ids) ? payload.missing_user_ids : [];
     const container = document.getElementById('batchResults');
     if (!results || !results.length) {
-      container.innerHTML = `<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">未找到匹配用户${missing.length ? `：${missing.join(', ')}` : ''}</div>`;
+      container.innerHTML = `<div style="color:var(--accent-crimson);font-family:var(--font-data);font-size:0.7rem;">未找到匹配用户${missing.length ? `：${missing.join(', ')}` : ''}</div>`;
       return;
     }
-    container.innerHTML = `${missing.length ? `<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;margin-bottom:0.5rem;">无预计算结果：${missing.join(', ')}</div>` : ''}
+    container.innerHTML = `${missing.length ? `<div style="color:var(--accent-crimson);font-family:var(--font-data);font-size:0.7rem;margin-bottom:0.5rem;">无预计算结果：${missing.join(', ')}</div>` : ''}
       <table class="data-table"><thead><tr><th>User ID</th><th>购买概率</th><th>倾向</th><th>预测</th><th>概率条</th></tr></thead>
       <tbody>${results.map(r => `<tr>
         <td style="color:var(--text-primary)">${r.user_id}</td>
@@ -888,7 +923,7 @@ async function renderBehavior(main) {
     if (!uid) return;
     const data = await fetchAPI(`/path/user-journey/${uid}`);
     const container = document.getElementById('journeyResult');
-    if (!data) { container.innerHTML = '<div style="color:var(--accent-crimson);font-family:var(--font-mono);font-size:0.7rem;">用户不存在或数据不可用</div>'; return; }
+    if (!data) { container.innerHTML = '<div style="color:var(--accent-crimson);font-family:var(--font-data);font-size:0.7rem;">用户不存在或数据不可用</div>'; return; }
     const convRate = data.total_clicks > 0 ? (data.total_orders / data.total_clicks * 100).toFixed(1) : '0.0';
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:0.6rem;">
@@ -897,7 +932,7 @@ async function renderBehavior(main) {
         <div class="kpi-card"><div class="kpi-label">转化率</div><div class="kpi-value" style="font-size:1.3rem;">${convRate}%</div></div>
         <div class="kpi-card"><div class="kpi-label">最近活跃</div><div class="kpi-value" style="font-size:1.3rem;">${data.R_days}天前</div></div>
       </div>
-      <div style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.65rem;">${data.message || ''}</div>`;
+      <div style="color:var(--text-muted);font-family:var(--font-data);font-size:0.65rem;">${data.message || ''}</div>`;
   });
 }
 
@@ -906,12 +941,11 @@ async function renderBehavior(main) {
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 
 async function renderSegments(main) {
-  const [clusters, clusterCat] = await Promise.all([
+  const [rawClusters, clusterCat] = await Promise.all([
     fetchAPI('/segments/clusters'), fetchAPI('/segments/cluster-category'),
   ]);
 
-  const names = ['中坚用户', '高价值用户', '流失/沉睡', '极低价值'];
-  const colors = [STEEL, GOLD, CRIMSON, SAGE];
+  const clusters = clusterMeta(rawClusters);
 
   main.innerHTML = `
     <div class="page-header">
@@ -919,10 +953,10 @@ async function renderSegments(main) {
       <h1 class="display-title">用户分群<em>与标签</em></h1>
     </div>
     <div class="kpi-grid">${(clusters||[]).map((c,i)=>`
-      <div class="kpi-card animate-in stagger-${i+1}" style="border-left:3px solid ${colors[i]};">
-        <div class="kpi-label">Cluster ${c.cluster} · ${names[i]||''}</div>
+      <div class="kpi-card animate-in stagger-${i+1}" style="border-left:3px solid ${c.color};">
+        <div class="kpi-label">Cluster ${c.cluster} · ${c.role}</div>
         <div class="kpi-value" style="font-size:1.3rem;">${c.user_count.toLocaleString()}</div>
-        <div class="kpi-subtitle">R ${c.avg_R.toFixed(0)}天 · F ${c.avg_F.toFixed(1)} · M ¥${c.avg_M.toFixed(0)} · 订单率 ${(c.order_rate*100).toFixed(0)}%</div>
+        <div class="kpi-subtitle">R ${c.avg_R.toFixed(0)}天 · F ${c.avg_F.toFixed(1)} · M ¥${formatNumber(c.avg_M, 0)} · 订单率 ${(c.order_rate*100).toFixed(0)}%</div>
       </div>`).join('')}</div>
     <div class="chart-row">
       <div class="chart-panel animate-in stagger-5"><div class="chart-title">分群画像雷达图</div><div class="chart-subtitle">R/F/M/点击/订单率 · 归一化对比</div><div class="chart-plot h400" id="chart-radar"></div></div>
@@ -937,15 +971,22 @@ async function renderSegments(main) {
   // Radar
   if (clusters) {
     const radarLabels = ['活跃度(R↓)', '频次(F)', '消费(M)', '点击量', '订单率'];
-    const radarCols = ['avg_R', 'avg_F', 'avg_M', 'avg_clicks', 'order_rate'];
-    const maxVals = radarCols.map(col => Math.max(...clusters.map(c => Math.abs(c[col]||0)), 0.01));
+    const metricCols = ['avg_F', 'avg_M', 'avg_clicks', 'order_rate'];
+    const maxVals = metricCols.map(col => Math.max(...clusters.map(c => Math.abs(c[col]||0)), 0.01));
+    const rVals = clusters.map(c => Number(c.avg_R || 0));
+    const rMin = Math.min(...rVals), rMax = Math.max(...rVals);
+    const normalizeRecency = c => rMax > rMin ? (rMax - Number(c.avg_R || 0)) / (rMax - rMin) : 0;
     draw('chart-radar', clusters.map((c, i) => ({
       type: 'scatterpolar',
-      r: [...radarCols.map((col, j) => (c[col]||0) / maxVals[j]), (c[radarCols[0]]||0) / maxVals[0]],
+      r: [
+        normalizeRecency(c),
+        ...metricCols.map((col, j) => (c[col]||0) / maxVals[j]),
+        normalizeRecency(c),
+      ],
       theta: [...radarLabels, radarLabels[0]],
-      name: `Cluster ${c.cluster} ${names[i]}`,
-      fill: 'toself', line: { color: colors[i], width: 2 },
-      fillcolor: `${colors[i]}18`,
+      name: `Cluster ${c.cluster} ${c.role}`,
+      fill: 'toself', line: { color: c.color, width: 2 },
+      fillcolor: `${c.color}18`,
     })), {
       polar: {
         radialaxis: { visible: true, range: [0, 1.05], gridcolor: '#e8e3da', color: '#5c5852' },
@@ -958,7 +999,7 @@ async function renderSegments(main) {
 
     // Cluster table
     document.getElementById('chart-cluster-table').innerHTML = `<table class="data-table"><thead><tr><th>群组</th><th>角色</th><th>用户数</th><th>均R(天)</th><th>均F</th><th>均M(¥)</th><th>均点击</th><th>订单率</th></tr></thead>
-      <tbody>${clusters.map((c,i)=>`<tr><td style="color:${colors[i]};font-weight:500;">Cluster ${c.cluster}</td><td>${names[i]||''}</td><td>${c.user_count.toLocaleString()}</td><td>${c.avg_R.toFixed(0)}</td><td>${c.avg_F.toFixed(1)}</td><td>${c.avg_M.toLocaleString()}</td><td>${c.avg_clicks.toFixed(0)}</td><td>${(c.order_rate*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`;
+      <tbody>${clusters.map(c=>`<tr><td style="color:${c.color};font-weight:500;">Cluster ${c.cluster}</td><td>${c.role}</td><td>${c.user_count.toLocaleString()}</td><td>${c.avg_R.toFixed(0)}</td><td>${c.avg_F.toFixed(1)}</td><td>${formatNumber(c.avg_M, c.avg_M < 1 && c.avg_M > 0 ? 2 : 0)}</td><td>${c.avg_clicks.toFixed(0)}</td><td>${(c.order_rate*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>`;
   }
 
   // Heatmap — normalize per-cluster category distribution
@@ -1049,7 +1090,7 @@ async function renderProducts(main) {
     values: topCats.map(d => d.count),
     parents: topCats.map(() => ''),
     marker: { colors: topCats.map(d => d.count), colorscale: [[0,'#faf8f5'],[0.3,BRONZE],[0.6,GOLD],[1,CRIMSON]] },
-    textfont: { color: '#1a1815', size: 12, family: 'Playfair Display' },
+    textfont: { color: '#1a1815', size: 12, family: FONT_FAMILY },
     textinfo: 'label+value',
   }], { margin: { l: 10, r: 10, t: 30, b: 10 } });
 

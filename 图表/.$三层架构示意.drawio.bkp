@@ -1,0 +1,52 @@
+<mxfile host="Electron">
+  <diagram name="三层架构示意" id="0">
+    <mxGraphModel dx="1285" dy="851" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1280" pageHeight="720" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" parent="1" style="swimlane;startSize=34;html=1;whiteSpace=wrap;rounded=1;container=1;collapsible=0;fillColor=#f7fbf7;strokeColor=#82b366;fontColor=#1f3a24;fontStyle=1;fontSize=16;align=center;" value="数据层" vertex="1">
+          <mxGeometry height="360" width="340" x="40" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="3" parent="2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#1f3a24;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;" value="CSV / Parquet 存储&lt;div&gt;&lt;span style=&quot;color: rgb(47, 79, 53); font-size: 13px; font-weight: 400;&quot;&gt;用户、点击、订单、商品等业务数据&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="160" width="200" x="70" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="5" parent="1" style="swimlane;startSize=34;html=1;whiteSpace=wrap;rounded=1;container=1;collapsible=0;fillColor=#f6f9ff;strokeColor=#6c8ebf;fontColor=#1c3557;fontStyle=1;fontSize=16;align=center;" value="计算层" vertex="1">
+          <mxGeometry height="440" width="360" x="470" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="6" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#1c3557;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="特征工程流水线" vertex="1">
+          <mxGeometry height="75" width="240" x="60" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="7" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontColor=#334e73;fontSize=13;align=center;verticalAlign=middle;spacing=8;" value="时间窗口划分、标签构造、行为特征提取" vertex="1">
+          <mxGeometry height="70" width="240" x="60" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="8" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontColor=#5f3b00;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="FastAPI 推理服务" vertex="1">
+          <mxGeometry height="75" width="240" x="60" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="15" edge="1" parent="5" source="6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#6c8ebf;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="16" edge="1" parent="5" source="7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#6c8ebf;fontColor=#334e73;fontSize=12;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="8" value="模型推理与指标聚合">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9" parent="1" style="swimlane;startSize=34;html=1;whiteSpace=wrap;rounded=1;container=1;collapsible=0;fillColor=#fbf8fd;strokeColor=#9673a6;fontColor=#402b4d;fontStyle=1;fontSize=16;align=center;" value="表现层" vertex="1">
+          <mxGeometry height="360" width="320" x="920" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="10" parent="9" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontColor=#402b4d;fontSize=15;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="Plotly.js 仪表盘" vertex="1">
+          <mxGeometry height="85" width="200" x="60" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="9" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontColor=#563a63;fontSize=13;align=center;verticalAlign=middle;spacing=8;" value="用户画像、购买倾向、行为路径、分群分析" vertex="1">
+          <mxGeometry height="70" width="230" x="45" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="12" edge="1" parent="1" source="2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#5f7f57;fontColor=#4c6547;fontSize=12;exitX=1;exitY=0.38;exitDx=0;exitDy=0;entryX=0;entryY=0.27;entryDx=0;entryDy=0;" target="5" value="结构化数据输入">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="13" edge="1" parent="1" source="2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#6c8ebf;fontColor=#334e73;fontSize=12;exitX=1;exitY=0.60;exitDx=0;exitDy=0;entryX=0;entryY=0.63;entryDx=0;entryDy=0;" target="5" value="特征与预测结果">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="14" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#d79b00;fontColor=#6c4700;fontSize=12;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="9" value="REST API / JSON">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -35,14 +35,17 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* ── Typography ── */
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&display=swap');
-
     * {
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+            'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC',
+            'Source Han Sans SC', sans-serif;
     }
 
     h1, h2, h3, .big-number, .module-title {
-        font-family: 'Playfair Display', 'Didot', 'Georgia', serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+            'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC',
+            'Source Han Sans SC', sans-serif;
+        font-weight: 600;
     }
 
     /* ── Global Theme ── */
@@ -81,9 +84,10 @@ st.markdown("""
         border-right: 1px solid #2a2a3a;
     }
     [data-testid="stSidebar"] h1 {
-        font-family: 'Playfair Display', serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+            'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
         font-size: 1.4rem;
-        font-weight: 700;
+        font-weight: 600;
         color: #c9a96e;
         letter-spacing: 0.04em;
         padding-bottom: 0.5rem;
@@ -118,11 +122,13 @@ st.markdown("""
         box-shadow: 0 4px 24px rgba(201,169,110,0.08);
     }
     .metric-value {
-        font-family: 'Playfair Display', serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+            'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
         font-size: 2rem;
-        font-weight: 700;
+        font-weight: 600;
         color: #c9a96e;
-        letter-spacing: 0.02em;
+        letter-spacing: 0;
+        font-variant-numeric: tabular-nums;
     }
     .metric-label {
         font-size: 0.8rem;
@@ -134,7 +140,8 @@ st.markdown("""
 
     /* ── Section headers ── */
     .section-title {
-        font-family: 'Playfair Display', serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+            'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
         font-size: 1.5rem;
         font-weight: 600;
         color: #e8e4d9;
@@ -203,13 +210,48 @@ st.markdown("""
 # ── Constants ───────────────────────────────────────────────────────────────
 
 API_BASE = "http://localhost:8000"
+FONT_FAMILY = (
+    "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, "
+    "Microsoft YaHei, Noto Sans CJK SC, Source Han Sans SC, sans-serif"
+)
 GOLD_SEQUENTIAL = [
     [0, "#1a1a2e"], [0.2, "#c9a96e"], [0.5, "#e0c78a"], [0.8, "#c9a96e"], [1, "#1a1a2e"]
 ]
 CHART_COLORS = ["#c9a96e", "#8b7355", "#5b8c5a", "#c97e4f", "#7b8ca8", "#a6844a",
                 "#6b9e6a", "#d4956a", "#5a7a9a", "#b8955a"]
+CLUSTER_COLORS = ["#7b8ca8", "#c9a96e", "#c97e4f", "#5b8c5a", "#8b7d9e", "#6b95a8"]
 
 CACHE_TTL = 300  # 5 minutes
+
+
+def cluster_role(c: dict, clusters: list[dict]) -> str:
+    """Derive business labels from metrics because K-Means ids are arbitrary."""
+    order_rate = float(c.get("order_rate") or 0)
+    avg_m = float(c.get("avg_M") or 0)
+    avg_f = float(c.get("avg_F") or 0)
+    avg_clicks = float(c.get("avg_clicks") or 0)
+    max_m = max([float(x.get("avg_M") or 0) for x in clusters] + [1.0])
+    max_f = max([float(x.get("avg_F") or 0) for x in clusters] + [1.0])
+
+    if order_rate >= 0.8 and avg_m >= max_m * 0.6:
+        return "高价值用户"
+    if order_rate >= 0.8 and (avg_f >= max_f * 0.3 or avg_m > 0):
+        return "活跃购买用户"
+    if order_rate < 0.05 and avg_clicks <= 1 and avg_m < 1:
+        return "沉睡/无行为用户"
+    if order_rate < 0.05 and avg_clicks > 1:
+        return "浏览未转化用户"
+    return "低频维护用户"
+
+
+def enrich_clusters(clusters: list[dict]) -> list[dict]:
+    enriched = []
+    for i, c in enumerate(clusters):
+        row = dict(c)
+        row["role"] = cluster_role(c, clusters)
+        row["color"] = CLUSTER_COLORS[i % len(CLUSTER_COLORS)]
+        enriched.append(row)
+    return enriched
 
 
 # ── API helpers ─────────────────────────────────────────────────────────────
@@ -290,11 +332,11 @@ with st.sidebar:
 
 def chart_layout(fig: go.Figure, title: str = "", height: int = 420) -> go.Figure:
     fig.update_layout(
-        title=dict(text=title, font=dict(size=18, color="#e8e4d9", family="Playfair Display"),
+        title=dict(text=title, font=dict(size=18, color="#e8e4d9", family=FONT_FAMILY),
                    x=0.01),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#9895a0", size=12),
+        font=dict(color="#9895a0", size=12, family=FONT_FAMILY),
         margin=dict(l=20, r=20, t=50, b=20),
         height=height,
         xaxis=dict(gridcolor="#1e1e30", zeroline=False),
@@ -469,7 +511,7 @@ def render_overview():
             yaxis2=dict(gridcolor="#1e1e30"),
         )
         for anno in fig.layout.annotations:
-            anno.font = dict(color="#e8e4d9", size=14, family="Playfair Display")
+            anno.font = dict(color="#e8e4d9", size=14, family=FONT_FAMILY)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -730,24 +772,17 @@ def render_segments():
     clusters = api_get("/api/segments/clusters")
     if not clusters:
         return
+    clusters = enrich_clusters(clusters)
 
     # Cluster KPI cards
     cols = st.columns(len(clusters))
-    cluster_names = {
-        0: "中坚用户",
-        1: "高价值用户",
-        2: "流失/沉睡用户",
-        3: "极低价值用户",
-    }
-    cluster_colors = ["#7b8ca8", "#c9a96e", "#c97e4f", "#5b8c5a"]
 
-    for i, (col, c, color) in enumerate(zip(cols, clusters, cluster_colors)):
+    for col, c in zip(cols, clusters):
         with col:
-            name = cluster_names.get(c["cluster"], f"Cluster {c['cluster']}")
             st.markdown(f"""
-            <div class="metric-card" style="border-left: 3px solid {color};">
-                <div style="color:{color};font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">
-                    Cluster {c['cluster']}<br>{name}</div>
+            <div class="metric-card" style="border-left: 3px solid {c['color']};">
+                <div style="color:{c['color']};font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;">
+                    Cluster {c['cluster']}<br>{c['role']}</div>
                 <div style="font-size:1.5rem;font-weight:700;color:#e8e4d9;">{c['user_count']:,}</div>
                 <div style="font-size:0.75rem;color:#9895a0;">用户</div>
                 <div style="font-size:0.75rem;color:#9895a0;margin-top:0.25rem;">
@@ -764,21 +799,25 @@ def render_segments():
         # Radar chart
         radar_cols = ["avg_R", "avg_F", "avg_M", "avg_clicks", "order_rate"]
         radar_labels = ["活跃度(R↓)", "频次(F)", "消费(M)", "点击量", "订单率"]
+        r_values = [float(c.get("avg_R", 0) or 0) for c in clusters]
+        r_min, r_max = min(r_values), max(r_values)
 
         fig = go.Figure()
-        for c, color, name in zip(clusters, cluster_colors, cluster_names.values()):
-            values = [c.get(col, 0) for col in radar_cols]
-            # Normalize for radar (min-max per metric)
-            max_vals = [max(abs(c2.get(col, 0)) for c2 in clusters) for col in radar_cols]
-            norm_vals = [v / max(mv, 1) for v, mv in zip(values, max_vals)]
+        for c in clusters:
+            metric_cols = ["avg_F", "avg_M", "avg_clicks", "order_rate"]
+            max_vals = [max(abs(c2.get(col, 0)) for c2 in clusters) for col in metric_cols]
+            recency_score = (r_max - float(c.get("avg_R", 0) or 0)) / max(r_max - r_min, 1)
+            norm_vals = [recency_score] + [
+                float(c.get(col, 0) or 0) / max(mv, 1) for col, mv in zip(metric_cols, max_vals)
+            ]
 
             fig.add_trace(go.Scatterpolar(
                 r=norm_vals + [norm_vals[0]],
                 theta=radar_labels + [radar_labels[0]],
-                name=f"Cluster {c['cluster']} {name}",
+                name=f"Cluster {c['cluster']} {c['role']}",
                 fill="toself",
-                line=dict(color=color, width=2),
-                fillcolor=f"rgba({','.join(str(int(color.lstrip('#')[i:i+2], 16)) for i in (0, 2, 4))}, 0.12)",
+                line=dict(color=c["color"], width=2),
+                fillcolor=f"rgba({','.join(str(int(c['color'].lstrip('#')[i:i+2], 16)) for i in (0, 2, 4))}, 0.12)",
             ))
         fig.update_layout(
             polar=dict(
@@ -801,7 +840,7 @@ def render_segments():
         for c in clusters:
             table_data.append({
                 "群组": f"Cluster {c['cluster']}",
-                "角色": cluster_names.get(c["cluster"], ""),
+                "角色": c["role"],
                 "用户数": f"{c['user_count']:,}",
                 "均R(天)": f"{c['avg_R']:.0f}",
                 "均F(次)": f"{c['avg_F']:.1f}",
@@ -854,7 +893,7 @@ def render_segments():
     with st.expander("📋 群组详情与样本用户", expanded=False):
         selected_cluster = st.selectbox(
             "选择群组", [c["cluster"] for c in clusters],
-            format_func=lambda x: f"Cluster {x} — {cluster_names.get(x, '')}"
+            format_func=lambda x: f"Cluster {x} — {next((c['role'] for c in clusters if c['cluster'] == x), '')}"
         )
         detail = api_get(f"/api/segments/cluster/{selected_cluster}")
         if detail:
@@ -923,7 +962,7 @@ def render_hot_products():
                         [1, "#c97e4f"],
                     ],
                 ),
-                textfont=dict(color="#e8e4d9", size=13, family="Playfair Display"),
+                textfont=dict(color="#e8e4d9", size=13, family=FONT_FAMILY),
                 hovertemplate="%{label}<br>订单量: %{value:,}<extra></extra>",
             ))
             fig.update_layout(
